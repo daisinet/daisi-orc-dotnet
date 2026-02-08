@@ -6,9 +6,6 @@ Proto contracts for the service layers are found in the Daisi.SDK project, along
 This is the main console project that can be hosted in the cloud or run from a console application locally during development. Cloud environments should be secured with SSL. Private networks *can lose the overhead of SSL* if the data
 isn't leaving the local network, but SSL is still recommended even for private networks.
 
-### Project - Daisi.Orc.Core
-This is the core library that contains various interfaces and a CosmoDb repository, which is used by default. Abstraction for other databases and repository types is planned, but not yet implemented.
-
 #### User Secrets
 
 ```
@@ -26,6 +23,10 @@ This is the core library that contains various interfaces and a CosmoDb reposito
   }
 }
 ```
+
+### Project - Daisi.Orc.Core
+This is the core library that contains various interfaces and a CosmoDb repository, which is used by default. Abstraction for other databases and repository types is planned, but not yet implemented.
+
 
 ### Project - Daisi.Functions.CosmoDb
 This project should be hosted with access to the CosmoDb so that it can track CRUD operations on the db and keep references up to date as changes are made.
