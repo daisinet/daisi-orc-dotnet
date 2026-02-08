@@ -65,8 +65,6 @@ public partial class Program
 
 #if DEBUG
         builder.Logging.AddDebug();
-        Daisi.SDK.Models.DaisiStaticSettings.ClientKey = "client-debug";
-
 #endif
 
         app.MapGet("/", () => "Communication with DAISI endpoints must be made through the DAISI SDK. To download a DAISI host application and/or the SDK, go to https://daisi.ai");
