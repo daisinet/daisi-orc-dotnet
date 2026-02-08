@@ -1,0 +1,60 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.2.11415.280 d18.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Daisi.Orc.Grpc", "Daisi.Orc.Grpc\Daisi.Orc.Grpc.csproj", "{5DE69532-A7AB-370E-B797-110A276A44F7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Daisi.Functions.CosmoDb", "Daisi.Functions.Cosmo\Daisi.Functions.CosmoDb.csproj", "{95B3A4C1-A7CB-F716-5C58-86D66937D899}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Daisi.Orc.Core", "Daisi.Orc.Core\Daisi.Orc.Core.csproj", "{2673ECBD-B967-8360-DABA-161944643FC6}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SDK", "SDK", "{734D3AB8-B889-4078-905A-D193EED6BE9D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Daisi.SDK", "..\daisi-sdk-dotnet\Daisi.SDK\Daisi.SDK.csproj", "{0DBF9352-D115-E158-69DB-144E51F20FCF}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Orc", "Orc", "{712BB016-57C3-4BD9-9465-8AFFBE7448CD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Daisi.SDK.Web", "..\daisi-sdk-dotnet\Daisi.SDK.Web\Daisi.SDK.Web.csproj", "{E5F64D52-9C19-B124-D07C-647687979498}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5DE69532-A7AB-370E-B797-110A276A44F7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5DE69532-A7AB-370E-B797-110A276A44F7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5DE69532-A7AB-370E-B797-110A276A44F7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5DE69532-A7AB-370E-B797-110A276A44F7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{95B3A4C1-A7CB-F716-5C58-86D66937D899}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{95B3A4C1-A7CB-F716-5C58-86D66937D899}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{95B3A4C1-A7CB-F716-5C58-86D66937D899}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{95B3A4C1-A7CB-F716-5C58-86D66937D899}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2673ECBD-B967-8360-DABA-161944643FC6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2673ECBD-B967-8360-DABA-161944643FC6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2673ECBD-B967-8360-DABA-161944643FC6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2673ECBD-B967-8360-DABA-161944643FC6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0DBF9352-D115-E158-69DB-144E51F20FCF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0DBF9352-D115-E158-69DB-144E51F20FCF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0DBF9352-D115-E158-69DB-144E51F20FCF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0DBF9352-D115-E158-69DB-144E51F20FCF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E5F64D52-9C19-B124-D07C-647687979498}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5F64D52-9C19-B124-D07C-647687979498}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5F64D52-9C19-B124-D07C-647687979498}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5F64D52-9C19-B124-D07C-647687979498}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{5DE69532-A7AB-370E-B797-110A276A44F7} = {712BB016-57C3-4BD9-9465-8AFFBE7448CD}
+		{95B3A4C1-A7CB-F716-5C58-86D66937D899} = {712BB016-57C3-4BD9-9465-8AFFBE7448CD}
+		{2673ECBD-B967-8360-DABA-161944643FC6} = {712BB016-57C3-4BD9-9465-8AFFBE7448CD}
+		{0DBF9352-D115-E158-69DB-144E51F20FCF} = {734D3AB8-B889-4078-905A-D193EED6BE9D}
+		{E5F64D52-9C19-B124-D07C-647687979498} = {734D3AB8-B889-4078-905A-D193EED6BE9D}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {50CA9056-320F-40BF-981A-5CA3FE33423F}
+	EndGlobalSection
+EndGlobal
