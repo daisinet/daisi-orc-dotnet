@@ -1,6 +1,8 @@
 ﻿using Daisi.Orc.Core.Data.Db;
 using Daisi.Orc.Core.Data.Models;
+using Daisi.Orc.Core.Services;
 using Daisi.Orc.Grpc.Authentication;
+using Daisi.Orc.Grpc.Background;
 using Daisi.Orc.Grpc.RPCServices.V1;
 using Daisi.Protos.V1;
 using Daisi.SDK.Extensions;
@@ -72,6 +74,19 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
                     foreach (var sessionId in hostToRemove.SessionIncomingQueues.Keys)
                     {
                         SessionContainer.Close(sessionId);
+                    }
+
+                    // Award partial uptime credits before going offline
+                    try
+                    {
+                        var creditService = Program.App.Services.CreateScope()
+                            .ServiceProvider.GetRequiredService<CreditService>();
+                        await UptimeCreditService.AwardPartialUptimeCreditsAsync(
+                            host.Id, host.AccountId, creditService, Program.App.Logger);
+                    }
+                    catch (Exception ex)
+                    {
+                        Program.App.Logger.LogError(ex, $"Error awarding partial uptime credits for host {host.Name}");
                     }
 
                     host.DateStopped = DateTime.UtcNow;

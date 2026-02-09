@@ -33,11 +33,13 @@ public partial class Program
         builder.Services.AddSingleton<Cosmo>();
         builder.Services.AddScoped<AuthService>();
         builder.Services.AddScoped<OrcService>();
+        builder.Services.AddScoped<CreditService>();
 
         builder.Services.AddTransient<HeartbeatRequestCommandHandler>();
         builder.Services.AddTransient<SessionIncomingQueueHandler>();
         builder.Services.AddTransient<EnvironmentRequestCommandHandler>();
         builder.Services.AddTransient<InferenceCommandHandler>();
+        builder.Services.AddTransient<InferenceReceiptCommandHandler>();
 
         // Add services to the container.
         builder.Services.AddGrpc(options =>
@@ -48,6 +50,7 @@ public partial class Program
         });
 
         builder.Services.AddHostedService<SessionCleanupService>();
+        builder.Services.AddHostedService<UptimeCreditService>();
 
         var app = App = builder.Build();
 
@@ -63,6 +66,7 @@ public partial class Program
         app.MapGrpcService<RelayInferenceRPC>();
         app.MapGrpcService<RelaySettingsRPC>();
         app.MapGrpcService<SessionsRPC>();
+        app.MapGrpcService<CreditsRPC>();
 
 #if DEBUG
         builder.Logging.AddDebug();

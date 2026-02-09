@@ -4,6 +4,7 @@ using Daisi.Orc.Core.Services;
 using Daisi.Orc.Grpc.Authentication;
 using Daisi.Orc.Grpc.CommandServices.Containers;
 using Daisi.Orc.Grpc.CommandServices.Handlers;
+using Daisi.Orc.Grpc.CommandServices.HostCommandHandlers;
 using Daisi.Orc.Grpc.CommandServices.Interfaces;
 using Daisi.Protos.V1;
 using Google.Protobuf.WellKnownTypes;
@@ -27,6 +28,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             new Dictionary<string, Type>(){
                 { nameof(HeartbeatRequest), typeof(HeartbeatRequestCommandHandler) },
                 { nameof(EnvironmentRequest), typeof(EnvironmentRequestCommandHandler) },
+                { nameof(InferenceReceipt), typeof(InferenceReceiptCommandHandler) },
             }
         );
 
