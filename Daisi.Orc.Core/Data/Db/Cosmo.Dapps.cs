@@ -118,5 +118,20 @@ namespace Daisi.Orc.Core.Data.Db
             var response = await container.PatchItemAsync<Dapp>(dapp.Id, GetPartitionKey(dapp), patchOperations);
             return response.Resource;
         }
+
+        public async Task<Dapp?> SetDappIsDaisiAppAsync(string appId, bool isDaisiApp)
+        {
+            var dapp = await GetDappAsync(appId);
+            if (dapp is null) return null;
+
+            var patchOperations = new List<PatchOperation>
+            {
+                PatchOperation.Replace("/IsDaisiApp", isDaisiApp)
+            };
+
+            var container = await GetContainerAsync(AppsContainerName);
+            var response = await container.PatchItemAsync<Dapp>(dapp.Id, GetDappPartitionKey(dapp.AccountId), patchOperations);
+            return response.Resource;
+        }
     }
 }
