@@ -44,6 +44,10 @@ namespace Daisi.Orc.Core.Data.Db
                     AppsContainerName => AppsContainerPartitionKeyName,
                     NetworksContainerName => NetworksPartitionKeyName,
                     OrcsContainerName => OrcsPartitionKeyName,
+                    SkillsContainerName => SkillsPartitionKeyName,
+                    SkillReviewsContainerName => SkillReviewsPartitionKeyName,
+                    InstalledSkillsContainerName => InstalledSkillsPartitionKeyName,
+                    ModelsContainerName => ModelsPartitionKeyName,
                     _ => "id"
                 };
                     

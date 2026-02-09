@@ -1,4 +1,5 @@
 using Daisi.Orc.Core.Data.Db;
+using Daisi.Orc.Core.Data.Models;
 using Daisi.Orc.Core.Services;
 using Daisi.Orc.Grpc.Authentication;
 using Daisi.Orc.Grpc.Background;
@@ -84,6 +85,51 @@ public partial class Program
             var orcId = App.Configuration.GetValue<string>("Daisi:OrcId")!;
             var accountId = App.Configuration.GetValue<string>("Daisi:AccountId")!;
             await cosmo.PatchOrcStatusAsync(orcId, Daisi.Protos.V1.OrcStatus.Online, accountId);
+
+            // Seed default models if the Models container is empty
+            var existingModels = await cosmo.GetAllModelsAsync();
+            if (existingModels.Count == 0)
+            {
+                await cosmo.CreateModelAsync(new DaisiModel
+                {
+                    Name = "Gemma 3 4B Q8 XL",
+                    FileName = "gemma-3-4b-it-UD-Q8_K_XL.gguf",
+                    Url = "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-UD-Q8_K_XL.gguf?download=true",
+                    IsMultiModal = false,
+                    IsDefault = true,
+                    Enabled = true,
+                    LoadAtStartup = false,
+                    HasReasoning = false,
+                    LLama = new DaisiModelLLamaSettings
+                    {
+                        Runtime = 0,
+                        ContextSize = 8192,
+                        GpuLayerCount = -1,
+                        BatchSize = 512,
+                        AutoFallback = true
+                    }
+                });
+
+                await cosmo.CreateModelAsync(new DaisiModel
+                {
+                    Name = "Gemma 3 4B Q4 XL",
+                    FileName = "gemma-3-4b-it-UD-Q4_K_XL.gguf",
+                    Url = "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-UD-Q4_K_XL.gguf?download=true",
+                    IsMultiModal = false,
+                    IsDefault = false,
+                    Enabled = true,
+                    LoadAtStartup = false,
+                    HasReasoning = false,
+                    LLama = new DaisiModelLLamaSettings
+                    {
+                        Runtime = 0,
+                        ContextSize = 8192,
+                        GpuLayerCount = -1,
+                        BatchSize = 512,
+                        AutoFallback = true
+                    }
+                });
+            }
         });
 
         app.Lifetime.ApplicationStopping.Register(async () =>
