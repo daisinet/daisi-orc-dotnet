@@ -20,7 +20,7 @@ namespace Daisi.Orc.Core.Data.Db
         {
             return new PartitionKey(type.Name);
         }
-        public async Task<AccessKey> GetKeyAsync(string key, KeyTypes type)
+        public virtual async Task<AccessKey> GetKeyAsync(string key, KeyTypes type)
         {
             try
             {
@@ -111,7 +111,7 @@ namespace Daisi.Orc.Core.Data.Db
 
             return result;
         }
-        public async Task<AccessKey> CreateClientKeyAsync(AccessKey secretKey, IPAddress? requestorIPAddress, AccessKeyOwner owner, List<string>? accessToIds = null)
+        public virtual async Task<AccessKey> CreateClientKeyAsync(AccessKey secretKey, IPAddress? requestorIPAddress, AccessKeyOwner owner, List<string>? accessToIds = null)
         {
             var container = await GetContainerAsync(AccessKeyContainerName);
             AccessKey key = new AccessKey();

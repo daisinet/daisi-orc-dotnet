@@ -355,24 +355,49 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
             // Use ChannelReader.ReadAllAsync to await commands without polling.
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-            // Start background tasks for each session's outgoing queue
-            var sessionTasks = new List<Task>();
+            // Track which sessions already have forwarding tasks
+            var forwardedSessions = new ConcurrentDictionary<string, bool>();
 
-            // Forward session outgoing commands to the merged outgoing channel
-            foreach (var sessionOut in SessionOutgoingQueues)
+            void StartForwardingTask(string sessionId, Channel<Command> sessionChannel)
             {
-                sessionTasks.Add(Task.Run(async () =>
+                if (!forwardedSessions.TryAdd(sessionId, true))
+                    return;
+
+                _ = Task.Run(async () =>
                 {
                     try
                     {
-                        await foreach (var cmd in sessionOut.Value.Reader.ReadAllAsync(cts.Token))
+                        await foreach (var cmd in sessionChannel.Reader.ReadAllAsync(cts.Token))
                         {
                             OutgoingQueue.Writer.TryWrite(cmd);
                         }
                     }
                     catch (OperationCanceledException) { }
-                }, cts.Token));
+                }, cts.Token);
             }
+
+            // Start forwarding tasks for existing sessions
+            foreach (var sessionOut in SessionOutgoingQueues)
+            {
+                StartForwardingTask(sessionOut.Key, sessionOut.Value);
+            }
+
+            // Monitor for new sessions and start forwarding tasks for them
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    while (!cts.Token.IsCancellationRequested)
+                    {
+                        foreach (var sessionOut in SessionOutgoingQueues)
+                        {
+                            StartForwardingTask(sessionOut.Key, sessionOut.Value);
+                        }
+                        await Task.Delay(50, cts.Token);
+                    }
+                }
+                catch (OperationCanceledException) { }
+            }, cts.Token);
 
             // Read from the merged outgoing channel and send to host
             try

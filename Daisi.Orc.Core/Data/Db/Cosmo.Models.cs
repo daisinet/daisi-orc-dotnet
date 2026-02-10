@@ -10,7 +10,7 @@ namespace Daisi.Orc.Core.Data.Db
         public const string ModelsContainerName = "Models";
         public const string ModelsPartitionKeyName = "id";
 
-        public async Task<DaisiModel> CreateModelAsync(DaisiModel model)
+        public virtual async Task<DaisiModel> CreateModelAsync(DaisiModel model)
         {
             model.CreatedAt = DateTime.UtcNow;
             model.UpdatedAt = DateTime.UtcNow;
@@ -34,7 +34,7 @@ namespace Daisi.Orc.Core.Data.Db
             }
         }
 
-        public async Task<List<DaisiModel>> GetAllModelsAsync()
+        public virtual async Task<List<DaisiModel>> GetAllModelsAsync()
         {
             var container = await GetContainerAsync(ModelsContainerName);
             var query = container.GetItemLinqQueryable<DaisiModel>();

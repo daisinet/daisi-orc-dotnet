@@ -28,7 +28,7 @@ namespace Daisi.Orc.Core.Data.Db
         {
             return new PartitionKey(accountId);
         }
-        public async Task<bool> UserAllowedToLogin(string userId)
+        public virtual async Task<bool> UserAllowedToLogin(string userId)
         {
             var container = await GetContainerAsync(AccountsContainerName);
 

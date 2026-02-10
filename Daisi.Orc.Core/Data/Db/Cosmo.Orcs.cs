@@ -18,7 +18,7 @@ namespace Daisi.Orc.Core.Data.Db
             return new PartitionKey(orc.AccountId);
         }
 
-        public async Task<PagedResult<Orchestrator>> GetOrcsAsync(Protos.V1.PagingInfo? paging, string? orcId, string? accountId)
+        public virtual async Task<PagedResult<Orchestrator>> GetOrcsAsync(Protos.V1.PagingInfo? paging, string? orcId, string? accountId)
         {
             var container = await GetContainerAsync(OrcsContainerName);
             var networks = await GetNetworksAsync(accountId: accountId);
@@ -66,7 +66,7 @@ namespace Daisi.Orc.Core.Data.Db
 
         }
 
-        public async Task<Orchestrator> PatchOrcStatusAsync(string orcId, Protos.V1.OrcStatus status, string? accountId)
+        public virtual async Task<Orchestrator> PatchOrcStatusAsync(string orcId, Protos.V1.OrcStatus status, string? accountId)
         {
             List<PatchOperation> patchOperations = new List<PatchOperation>()
             {
@@ -80,7 +80,7 @@ namespace Daisi.Orc.Core.Data.Db
 
         }
 
-        public async Task<Orchestrator> PatchOrcConnectionCountAsync(string orcId, int connectionCount, string? accountId)
+        public virtual async Task<Orchestrator> PatchOrcConnectionCountAsync(string orcId, int connectionCount, string? accountId)
         {
             List<PatchOperation> patchOperations = new List<PatchOperation>()
             {

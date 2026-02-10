@@ -27,7 +27,7 @@ namespace Daisi.Orc.Core.Data.Db
             var item = await container.CreateItemAsync<Host>(host, GetPartitionKey(host));
             return item.Resource;
         }
-        public async Task<Host?> GetHostAsync(string hostId)
+        public virtual async Task<Host?> GetHostAsync(string hostId)
         {
             var container = await GetContainerAsync(HostsContainerName);
             try
@@ -84,7 +84,7 @@ namespace Daisi.Orc.Core.Data.Db
         /// </summary>
         /// <param name="host">The Host to update.</param>
         /// <returns>The Host that was updated.</returns>
-        public async Task<Host> PatchHostForConnectionAsync(Host host)
+        public virtual async Task<Host> PatchHostForConnectionAsync(Host host)
         {
             List<PatchOperation> patchOperations = new List<PatchOperation>()
             {
@@ -158,7 +158,7 @@ namespace Daisi.Orc.Core.Data.Db
         /// </summary>
         /// <param name="host">The Host to update.</param>
         /// <returns>The Host that was updated.</returns>
-        public async Task PatchHostEnvironmentAsync(Host host)
+        public virtual async Task PatchHostEnvironmentAsync(Host host)
         {
             List<PatchOperation> patchOperations = new List<PatchOperation>()
             {
