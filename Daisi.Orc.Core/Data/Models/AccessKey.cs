@@ -1,6 +1,6 @@
 ﻿using Daisi.Orc.Core.Data.Db;
 using Daisi.SDK.Extensions;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -9,10 +9,10 @@ namespace Daisi.Orc.Core.Data.Models
 {
     public class AccessKey
     {
-        [JsonProperty(PropertyName = "id")]
+        [JsonPropertyName("id")]
         public string Id { get; set; } = Cosmo.GenerateId(Cosmo.AccessKeyIdPrefix);
 
-        [JsonProperty(PropertyName = "type")]
+        [JsonPropertyName("type")]
         public string Type { get; set; }
 
         ///// <summary>
@@ -21,7 +21,7 @@ namespace Daisi.Orc.Core.Data.Models
         //[JsonProperty(PropertyName = "ttl")]
         //public int TimeToLive { get; set; } = 24 * 60 * 60;
         
-        [JsonProperty(PropertyName = "key")]
+        [JsonPropertyName("key")]
         public string Key { get; set; }
 
         /// <summary>

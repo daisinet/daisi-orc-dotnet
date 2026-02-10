@@ -1,4 +1,5 @@
-﻿using Daisi.SDK.Extensions;
+﻿using System.Text.Json;
+using Daisi.SDK.Extensions;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using System;
@@ -12,7 +13,14 @@ namespace Daisi.Orc.Core.Data.Db
         Lazy<CosmosClient> client = new Lazy<CosmosClient>(() =>
         {
             var connectionString = configuration[connectionStringConfigurationName];
-            return new(connectionString);
+            var options = new CosmosClientOptions
+            {
+                UseSystemTextJsonSerializerWithOptions = new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = null
+                }
+            };
+            return new(connectionString, options);
         });
 
         public static string GenerateId(string prefix)

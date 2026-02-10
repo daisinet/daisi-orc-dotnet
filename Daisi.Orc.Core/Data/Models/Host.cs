@@ -1,7 +1,7 @@
 ﻿using Daisi.Orc.Core.Data.Db;
 using Daisi.Protos.V1;
 using Daisi.SDK.Extensions;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -10,7 +10,7 @@ namespace Daisi.Orc.Core.Data.Models
 {
     public class Host
     {
-        [JsonProperty(PropertyName = "id")]
+        [JsonPropertyName("id")]
         public string Id { get; set; } = Cosmo.GenerateId(Cosmo.HostIdPrefex);
         public string AccountId { get; set; }
         public HostRegions Region { get; set; } = HostRegions.USSouthEast;

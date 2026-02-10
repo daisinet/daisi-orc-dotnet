@@ -1,11 +1,11 @@
 using Daisi.Orc.Core.Data.Db;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Daisi.Orc.Core.Data.Models
 {
     public class DaisiModel
     {
-        [JsonProperty(PropertyName = "id")]
+        [JsonPropertyName("id")]
         public string Id { get; set; } = Cosmo.GenerateId(Cosmo.ModelsIdPrefix);
         public string Name { get; set; }
         public string FileName { get; set; }

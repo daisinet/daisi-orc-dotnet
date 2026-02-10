@@ -1,5 +1,5 @@
 using Daisi.Orc.Core.Data.Db;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Daisi.Orc.Core.Data.Models
 {
@@ -13,7 +13,7 @@ namespace Daisi.Orc.Core.Data.Models
 
     public class UptimePeriod
     {
-        [JsonProperty(PropertyName = "id")]
+        [JsonPropertyName("id")]
         public string Id { get; set; } = Cosmo.GenerateId(Cosmo.UptimePeriodIdPrefix);
 
         public string AccountId { get; set; }

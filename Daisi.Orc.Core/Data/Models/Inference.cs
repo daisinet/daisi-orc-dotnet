@@ -1,7 +1,7 @@
 ﻿using Daisi.Orc.Core.Data.Db;
 using Daisi.Protos.V1;
 using Daisi.SDK.Extensions;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -13,7 +13,7 @@ namespace Daisi.Orc.Core.Data.Models
     /// </summary>
     public class Inference
     {
-        [JsonProperty(PropertyName = "id")]
+        [JsonPropertyName("id")]
         public string Id { get; set; } = Cosmo.GenerateId(Cosmo.InferenceIdPrefix);
         /// <summary>
         /// The ID of the Account that requested this Inference Session.

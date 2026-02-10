@@ -1,6 +1,6 @@
 ﻿using Daisi.Orc.Core.Data.Db;
 using Daisi.SDK.Extensions;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -9,7 +9,7 @@ namespace Daisi.Orc.Core.Data.Models
 {
     public class Account
     {
-        [JsonProperty(PropertyName = "id")]
+        [JsonPropertyName("id")]
         public string Id { get; set; } = Cosmo.GenerateId(Cosmo.AccountsIdPrefix);
         public string type { get; set; } = "Account";
         public string AccountId { get => Id; set => Id = value;  }

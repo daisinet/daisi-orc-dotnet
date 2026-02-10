@@ -12,7 +12,8 @@
 		<PackageReference Include="Azure.Communication.Sms" Version="1.0.2" />
 		<PackageReference Include="Microsoft.Azure.Cosmos" Version="3.54.0" />
 		<PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.10" />
-		<PackageReference Include="Newtonsoft.Json" Version="10.0.0.0" />
+		<!-- Required at runtime by Microsoft.Azure.Cosmos internals; our models use System.Text.Json -->
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -1,10 +1,10 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Daisi.Orc.Core.Data.Models.Skills;
 
 public class InstalledSkill
 {
-    [JsonProperty(PropertyName = "id")]
+    [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
     public string type { get; set; } = "InstalledSkill";
     public string SkillId { get; set; } = string.Empty;

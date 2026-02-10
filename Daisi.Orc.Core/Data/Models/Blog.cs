@@ -1,13 +1,13 @@
 ﻿using Daisi.Orc.Core.Data.Db;
 using Daisi.Orc.Core.Data.Models;
 using Daisi.SDK.Extensions;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Daisi.Orc.Core.Data.Models
 {
     public class Blog
     {
-        [JsonProperty(PropertyName = "id")]
+        [JsonPropertyName("id")]
         public string Id { get; set; } = Cosmo.GenerateId(Cosmo.BlogsIdPrefix);
         public string BlogId { get => Id; set => Id = value;  }
         public string Title { get; set; }
