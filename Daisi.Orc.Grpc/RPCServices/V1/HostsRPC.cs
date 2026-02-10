@@ -115,6 +115,99 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             return result;
         }
 
+        public async override Task<GetHostStatsResponse> GetHostStats(GetHostStatsRequest request, ServerCallContext context)
+        {
+            var accountId = context.GetAccountId();
+            var response = new GetHostStatsResponse();
+            var now = DateTime.UtcNow;
+
+            // Verify the host belongs to this account
+            var host = await cosmo.GetHostAsync(accountId, request.HostId);
+            if (host == null)
+                throw new RpcException(new Status(StatusCode.PermissionDenied, "Invalid host."));
+
+            // Determine date range based on timeframe
+            DateTime? startDate = request.Timeframe switch
+            {
+                Timeframe.Day => now.Date,
+                Timeframe.Week => now.Date.AddDays(-(int)now.DayOfWeek),
+                Timeframe.Month => new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc),
+                Timeframe.Year => new DateTime(now.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                _ => null
+            };
+
+            var messages = await cosmo.GetInferenceMessageStatsForHostAsync(request.HostId, startDate);
+
+            // Group into time buckets
+            Dictionary<int, List<InferenceMessageStat>> grouped;
+            int bucketCount;
+
+            switch (request.Timeframe)
+            {
+                case Timeframe.Day:
+                    grouped = messages.GroupBy(m => m.DateCreated.Hour)
+                        .ToDictionary(g => g.Key, g => g.ToList());
+                    bucketCount = 24;
+                    break;
+                case Timeframe.Week:
+                    grouped = messages.GroupBy(m => (int)(m.DateCreated.Date - startDate!.Value).TotalDays)
+                        .ToDictionary(g => g.Key, g => g.ToList());
+                    bucketCount = 7;
+                    break;
+                case Timeframe.Month:
+                    grouped = messages.GroupBy(m => m.DateCreated.Day - 1)
+                        .ToDictionary(g => g.Key, g => g.ToList());
+                    bucketCount = DateTime.DaysInMonth(now.Year, now.Month);
+                    break;
+                case Timeframe.Year:
+                    grouped = messages.GroupBy(m => m.DateCreated.Month - 1)
+                        .ToDictionary(g => g.Key, g => g.ToList());
+                    bucketCount = 12;
+                    break;
+                default: // All time - bucket by month
+                    if (!messages.Any())
+                        return response;
+                    var earliest = messages.Min(m => m.DateCreated);
+                    startDate = new DateTime(earliest.Year, earliest.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+                    grouped = messages.GroupBy(m =>
+                            (m.DateCreated.Year - earliest.Year) * 12 + m.DateCreated.Month - earliest.Month)
+                        .ToDictionary(g => g.Key, g => g.ToList());
+                    var monthDiff = (now.Year - earliest.Year) * 12 + now.Month - earliest.Month;
+                    bucketCount = monthDiff + 1;
+                    break;
+            }
+
+            for (int i = 0; i < bucketCount; i++)
+            {
+                var stat = new HostStat
+                {
+                    HostId = request.HostId,
+                    Timeframe = request.Timeframe,
+                    Part = i
+                };
+
+                if (grouped.TryGetValue(i, out var bucket))
+                {
+                    stat.TokenCount = bucket.Sum(m => (long)m.TokenCount);
+                    stat.SecondsProcessingTokens = (long)bucket.Sum(m => m.TokenProcessingSeconds);
+                }
+
+                DateTime bucketDate = request.Timeframe switch
+                {
+                    Timeframe.Day => startDate!.Value.AddHours(i),
+                    Timeframe.Week => startDate!.Value.AddDays(i),
+                    Timeframe.Month => startDate!.Value.AddDays(i),
+                    Timeframe.Year => new DateTime(now.Year, i + 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                    _ => startDate!.Value.AddMonths(i)
+                };
+                stat.Date = Timestamp.FromDateTime(DateTime.SpecifyKind(bucketDate, DateTimeKind.Utc));
+
+                response.Stats.Add(stat);
+            }
+
+            return response;
+        }
+
         public async override Task<RegisterHostResponse> Register(RegisterHostRequest request, ServerCallContext context)
         {
             RegisterHostResponse response = new();

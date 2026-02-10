@@ -15,4 +15,11 @@ namespace Daisi.Orc.Core.Data.Models
         public DateTime Date { get; set;  }
         public int? Part { get; set; }
     }
+
+    public class InferenceMessageStat
+    {
+        public int TokenCount { get; set; }
+        public float TokenProcessingSeconds { get; set; }
+        public DateTime DateCreated { get; set; }
+    }
 }
