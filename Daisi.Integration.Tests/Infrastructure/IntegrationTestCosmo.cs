@@ -13,6 +13,7 @@ using DaisiModelLLamaSettings = Daisi.Orc.Core.Data.Models.DaisiModelLLamaSettin
 using CreditAccount = Daisi.Orc.Core.Data.Models.CreditAccount;
 using CreditTransaction = Daisi.Orc.Core.Data.Models.CreditTransaction;
 using UptimePeriod = Daisi.Orc.Core.Data.Models.UptimePeriod;
+using HostRelease = Daisi.Orc.Core.Data.Models.HostRelease;
 
 namespace Daisi.Integration.Tests.Infrastructure;
 
@@ -38,6 +39,7 @@ public class IntegrationTestCosmo : Cosmo
     public ConcurrentDictionary<string, CreditAccount> CreditAccounts { get; } = new();
     public List<CreditTransaction> Transactions { get; } = new();
     public List<UptimePeriod> UptimePeriods { get; } = new();
+    public List<HostRelease> Releases { get; } = new();
 
     public IntegrationTestCosmo() : base(new ConfigurationBuilder().Build(), "unused")
     {
@@ -239,6 +241,14 @@ public class IntegrationTestCosmo : Cosmo
         if (startDate.HasValue) query = query.Where(p => p.DateStarted >= startDate.Value);
         if (endDate.HasValue) query = query.Where(p => p.DateStarted <= endDate.Value);
         return Task.FromResult(query.ToList());
+    }
+
+    // ========== Releases ==========
+
+    public override Task<HostRelease?> GetActiveReleaseAsync(string releaseGroup)
+    {
+        var release = Releases.FirstOrDefault(r => r.ReleaseGroup == releaseGroup && r.IsActive);
+        return Task.FromResult(release);
     }
 
     // ========== Seed helpers ==========

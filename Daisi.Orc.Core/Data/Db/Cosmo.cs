@@ -57,6 +57,7 @@ namespace Daisi.Orc.Core.Data.Db
                     InstalledSkillsContainerName => InstalledSkillsPartitionKeyName,
                     ModelsContainerName => ModelsPartitionKeyName,
                     CreditsContainerName => CreditsPartitionKeyName,
+                    ReleasesContainerName => ReleasesPartitionKeyName,
                     _ => "id"
                 };
                     

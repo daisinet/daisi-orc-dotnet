@@ -1,5 +1,6 @@
 using Daisi.Orc.Grpc.CommandServices.Containers;
 using Daisi.Orc.Grpc.CommandServices.Handlers;
+using Daisi.Orc.Tests.Fakes;
 using Daisi.Protos.V1;
 using Google.Protobuf.WellKnownTypes;
 using Microsoft.Extensions.Configuration;
@@ -78,10 +79,11 @@ namespace Daisi.Orc.Tests.CommandServices
         }
 
         [Fact]
-        public void EnvironmentHandler_HandleHostUpdaterCheck_WritesToChannelWriter()
+        public async Task EnvironmentHandler_HandleHostUpdaterCheck_WritesToChannelWriter()
         {
             // Test the static method that was updated from ConcurrentQueue to ChannelWriter
             var channel = Channel.CreateUnbounded<Command>();
+            var fakeCosmo = new FakeCosmo();
 
             var host = new Daisi.Orc.Core.Data.Models.Host
             {
@@ -98,7 +100,7 @@ namespace Daisi.Orc.Tests.CommandServices
             });
             var config = configBuilder.Build();
 
-            EnvironmentRequestCommandHandler.HandleHostUpdaterCheck(channel.Writer, host, config);
+            await EnvironmentRequestCommandHandler.HandleHostUpdaterCheckAsync(channel.Writer, host, fakeCosmo, config, NullLogger.Instance);
 
             // Since version 0.0.1 < 99.0.0, an update command should have been written
             Assert.True(channel.Reader.TryRead(out var cmd));
@@ -106,9 +108,10 @@ namespace Daisi.Orc.Tests.CommandServices
         }
 
         [Fact]
-        public void EnvironmentHandler_HandleHostUpdaterCheck_NoUpdateWhenCurrent()
+        public async Task EnvironmentHandler_HandleHostUpdaterCheck_NoUpdateWhenCurrent()
         {
             var channel = Channel.CreateUnbounded<Command>();
+            var fakeCosmo = new FakeCosmo();
 
             var host = new Daisi.Orc.Core.Data.Models.Host
             {
@@ -124,7 +127,7 @@ namespace Daisi.Orc.Tests.CommandServices
             });
             var config = configBuilder.Build();
 
-            EnvironmentRequestCommandHandler.HandleHostUpdaterCheck(channel.Writer, host, config);
+            await EnvironmentRequestCommandHandler.HandleHostUpdaterCheckAsync(channel.Writer, host, fakeCosmo, config, NullLogger.Instance);
 
             // Version 99.0.0 >= 1.0.0, no update needed
             Assert.False(channel.Reader.TryRead(out _));

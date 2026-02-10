@@ -3,6 +3,7 @@ using Daisi.Orc.Core.Data.Db;
 using Daisi.Orc.Core.Data.Models;
 using Microsoft.Extensions.Configuration;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 
 namespace Daisi.Orc.Tests.Fakes
 {
@@ -15,6 +16,7 @@ namespace Daisi.Orc.Tests.Fakes
         public ConcurrentDictionary<string, CreditAccount> CreditAccounts { get; } = new();
         public List<CreditTransaction> Transactions { get; } = new();
         public List<UptimePeriod> UptimePeriods { get; } = new();
+        public List<HostRelease> Releases { get; } = new();
 
         public FakeCosmo() : base(new ConfigurationBuilder().Build(), "unused")
         {
@@ -152,6 +154,12 @@ namespace Daisi.Orc.Tests.Fakes
                 TotalMinutes = totalMinutes,
                 CreditsPaid = 0
             });
+        }
+
+        public override Task<HostRelease?> GetActiveReleaseAsync(string releaseGroup)
+        {
+            var release = Releases.FirstOrDefault(r => r.ReleaseGroup == releaseGroup && r.IsActive);
+            return Task.FromResult(release);
         }
     }
 }

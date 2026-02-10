@@ -46,7 +46,7 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
                 Name = nameof(HeartbeatRequest)                
             });
 
-            EnvironmentRequestCommandHandler.HandleHostUpdaterCheck(responseQueue, hostOnline.Host, configuration);
+            await EnvironmentRequestCommandHandler.HandleHostUpdaterCheckAsync(responseQueue, hostOnline.Host, cosmo, configuration, logger);
 
             logger.LogInformation($"Handled Heartbeat for {hostOnline.Host.Name} at {DateTime.UtcNow} from IP {ip}");
         }

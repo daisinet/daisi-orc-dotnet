@@ -67,6 +67,7 @@ public partial class Program
         app.MapGrpcService<RelaySettingsRPC>();
         app.MapGrpcService<SessionsRPC>();
         app.MapGrpcService<CreditsRPC>();
+        app.MapGrpcService<ReleasesRPC>();
 
 #if DEBUG
         builder.Logging.AddDebug();

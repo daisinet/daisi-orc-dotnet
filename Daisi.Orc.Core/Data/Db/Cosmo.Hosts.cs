@@ -114,6 +114,7 @@ namespace Daisi.Orc.Core.Data.Db
                 PatchOperation.Set("/Name", host.Name),
                 PatchOperation.Set("/DirectConnect", host.DirectConnect),
                 PatchOperation.Set("/PeerConnect", host.PeerConnect),
+                PatchOperation.Set("/ReleaseGroup", host.ReleaseGroup),
                 PatchOperation.Set("/UpdateOperation", "Web"),
             };
 

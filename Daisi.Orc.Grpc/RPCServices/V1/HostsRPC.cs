@@ -67,6 +67,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 host.Name = request.Host.Name;
                 host.DirectConnect = request.Host.DirectConnect;
                 host.PeerConnect = request.Host.PeerConnect;
+                host.ReleaseGroup = request.Host.ReleaseGroup ?? host.ReleaseGroup;
 
                 await HostContainer.UpdateConfigurableWebSettingsAsync(host);
 
@@ -106,6 +107,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 DirectConnect = host.DirectConnect,
                 PeerConnect = host.PeerConnect,
                 Status = host.Status,
+                ReleaseGroup = host.ReleaseGroup,
             }));
 
             result.TotalCount = hosts.TotalCount;
