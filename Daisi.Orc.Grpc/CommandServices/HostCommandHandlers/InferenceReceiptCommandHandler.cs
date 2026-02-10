@@ -3,6 +3,7 @@ using Daisi.Orc.Grpc.CommandServices.Containers;
 using Daisi.Orc.Grpc.CommandServices.Handlers;
 using Daisi.Protos.V1;
 using System.Collections.Concurrent;
+using System.Threading.Channels;
 
 namespace Daisi.Orc.Grpc.CommandServices.HostCommandHandlers
 {
@@ -13,7 +14,7 @@ namespace Daisi.Orc.Grpc.CommandServices.HostCommandHandlers
         public override async Task HandleAsync(
             string hostId,
             Command command,
-            ConcurrentQueue<Command> responseQueue,
+            ChannelWriter<Command> responseQueue,
             CancellationToken cancellationToken = default)
         {
             if (!HostContainer.HostsOnline.TryGetValue(hostId, out var hostOnline))

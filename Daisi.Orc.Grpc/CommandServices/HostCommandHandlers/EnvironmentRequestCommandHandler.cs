@@ -3,12 +3,13 @@ using Daisi.Orc.Grpc.CommandServices.Containers;
 using Daisi.Protos.V1;
 using Google.Protobuf.WellKnownTypes;
 using System.Collections.Concurrent;
+using System.Threading.Channels;
 
 namespace Daisi.Orc.Grpc.CommandServices.Handlers
 {
     public class EnvironmentRequestCommandHandler(ILogger<EnvironmentRequestCommandHandler> logger, Cosmo cosmo, IConfiguration configuration) : OrcCommandHandlerBase
     {
-        public override async Task HandleAsync(string hostId, Command command, ConcurrentQueue<Command> responseQueue, CancellationToken cancellationToken = default)
+        public override async Task HandleAsync(string hostId, Command command, ChannelWriter<Command> responseQueue, CancellationToken cancellationToken = default)
         {
             if (HostContainer.HostsOnline.TryGetValue(hostId, out var host))
             {
@@ -24,7 +25,7 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
             }
         }
 
-        public static void HandleHostUpdaterCheck(ConcurrentQueue<Command> responseQueue, Core.Data.Models.Host host, IConfiguration configuration)
+        public static void HandleHostUpdaterCheck(ChannelWriter<Command> responseQueue, Core.Data.Models.Host host, IConfiguration configuration)
         {
             var isDesktop = host.OperatingSystem == "Windows"
                          || host.OperatingSystem == "MacCatalyst"
@@ -49,7 +50,7 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
 
                     if (currentVersion < minimumHostVersion)
                     {
-                        responseQueue.Enqueue(new Command()
+                        responseQueue.TryWrite(new Command()
                         {
                             Name = nameof(UpdateRequiredRequest),
                             Payload = Any.Pack(new UpdateRequiredRequest() { HostAppUrl = $"https://daisi.blob.core.windows.net/releases/latest-desktop.zip" })

@@ -9,6 +9,10 @@
 
 
 	<ItemGroup>
+		<InternalsVisibleTo Include="Daisi.Orc.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="grpc.aspnetcore" Version="2.71.0" />
 	</ItemGroup>
  

@@ -12,6 +12,7 @@ using Grpc.Core;
 using Microsoft.AspNetCore.Authorization;
 using System.Collections.Concurrent;
 using System.Configuration;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using Type = System.Type;
 
@@ -105,12 +106,12 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                                     logger.LogInformation($"INCOMING ORC COMMAND \"{command.Name}\" FROM {host.Name}");
                                     handler = (IOrcCommandHandler?)serviceProvider.GetService(commandHandlerType);
                                     handler.CallContext = context;
-                                    await handler.HandleAsync(host.Id, command, hostOnline.OutgoingQueue, context.CancellationToken);
+                                    await handler.HandleAsync(host.Id, command, hostOnline.OutgoingQueue.Writer, context.CancellationToken);
                                 }
                                 else if (!string.IsNullOrWhiteSpace(command.SessionId))
                                 {
                                     logger.LogInformation($"INCOMING SESSION COMMAND \"{command.Name}\" from \"{host.Name}\" on SessionID {command.SessionId}");
-                                    await sessionHandler.HandleAsync(host.Id, command, hostOnline.SessionOutgoingQueues[command.SessionId], context.CancellationToken);
+                                    await sessionHandler.HandleAsync(host.Id, command, hostOnline.SessionOutgoingQueues[command.SessionId].Writer, context.CancellationToken);
                                 }
                                 else
                                 {
@@ -132,11 +133,8 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 }
             });
 
-            // Send messages to the Host
-            while (!context.CancellationToken.IsCancellationRequested)
-            {
-                await hostOnline.SendOutgoingCommandsAsync(responseStream, context.CancellationToken);
-            }
+            // Send messages to the Host (blocks asynchronously via ChannelReader)
+            await hostOnline.SendOutgoingCommandsAsync(responseStream, context.CancellationToken);
 
             await HostContainer.UnregisterHostAsync(host.Id, cosmo, Program.App.Configuration);
 

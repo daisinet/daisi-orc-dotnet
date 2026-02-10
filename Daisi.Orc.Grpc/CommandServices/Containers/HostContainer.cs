@@ -13,6 +13,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
+using System.Threading.Channels;
 using static Azure.Core.HttpHeader;
 
 namespace Daisi.Orc.Grpc.CommandServices.Containers
@@ -158,57 +159,39 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
                 SessionId = session.Id,
                 RequestId = id
             };
-            outQueue.Enqueue(command);
+            outQueue.Writer.TryWrite(command);
 
-            // Listen for the response for a certain amount of time.
-            ResponseT? outResponse = await Task.Run<ResponseT?>(async () =>
+            // Listen for the response using ChannelReader with timeout.
+            using var cts = new CancellationTokenSource(millisecondsToWait);
+
+            try
             {
-                ResponseT? response = default;
-                var start = DateTime.UtcNow;
-                bool run = true;
-
-                while (run)
+                await foreach (var inCommand in inQueue.Reader.ReadAllAsync(cts.Token))
                 {
-                    if ((DateTime.UtcNow - start).TotalMilliseconds > millisecondsToWait)
-                    {
-                        run = false;
-                        Program.App.Logger.LogError($"DAISI ORC: Timeout waiting for response from host \"{session.CreateResponse.Host.Name}\": {typeof(ResponseT).Name}");
-                        return response;
-                    }
-                    try
-                    {
-                        if (inQueue.TryDequeue(out var inCommand))
-                        {
-                            if (inCommand is null || inCommand.RequestId != command.RequestId)
-                                continue;
+                    if (inCommand is null || inCommand.RequestId != command.RequestId)
+                        continue;
 
-                            start = DateTime.UtcNow;
+                    cts.CancelAfter(millisecondsToWait); // Reset timeout on each relevant message
 
-                            if (inCommand.Name == typeof(ResponseT).Name)
-                            {
-                                if (!inCommand.Payload.TryUnpack<ResponseT>(out response))
-                                    Program.App.Logger.LogError($"DAISI: Could not unpack {inCommand.Name} payload to {typeof(ResponseT).Name}");
-
-                                run = false;
-                                return response;
-                            }
-                        }
-                    }
-                    catch (Exception exc)
+                    if (inCommand.Name == typeof(ResponseT).Name)
                     {
-                        Program.App.Logger.LogError($"SendToHostAndWaitAsync ERROR: {exc.Message}");
-                        run = false;
+                        if (!inCommand.Payload.TryUnpack<ResponseT>(out var response))
+                            Program.App.Logger.LogError($"DAISI: Could not unpack {inCommand.Name} payload to {typeof(ResponseT).Name}");
+
                         return response;
                     }
                 }
-                run = false;
+            }
+            catch (OperationCanceledException)
+            {
+                Program.App.Logger.LogError($"DAISI ORC: Timeout waiting for response from host \"{session.CreateResponse.Host.Name}\": {typeof(ResponseT).Name}");
+            }
+            catch (Exception exc)
+            {
+                Program.App.Logger.LogError($"SendToHostAndWaitAsync ERROR: {exc.Message}");
+            }
 
-                return response;
-            });
-
-            return outResponse;
-
-
+            return default;
         }
 
         internal static async Task SendToHostAndStreamAsync<RequestT, ResponseT>(DaisiSession session, RequestT request, IServerStreamWriter<ResponseT> responseStream, CancellationToken cancellationToken = default, int millisecondsToWaitBetweenResponses = 60000)
@@ -224,7 +207,6 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
             if (!hostOnline.SessionIncomingQueues.TryGetValue(session.Id, out var inQueue))
                 throw new Exception($"DAISI: Could not find host's incoming command queue for {session.Id}");
 
-
             // Queue the HostManager to send the command to the Host
             Command command = new()
             {
@@ -233,77 +215,55 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
                 SessionId = session.Id,
                 RequestId = $"req-{StringExtensions.Random()}"
             };
-            outQueue.Enqueue(command);
+            outQueue.Writer.TryWrite(command);
 
-            // Listen for the response for a certain amount of time.
+            // Listen for the response using ChannelReader with timeout.
+            using var timeoutCts = new CancellationTokenSource(millisecondsToWaitBetweenResponses);
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
-            await Task.Run(async () =>
+            try
             {
-                ResponseT? response = default;
-                var start = DateTime.UtcNow;
-                bool run = true;
-
-                while (run && !cancellationToken.IsCancellationRequested)
+                await foreach (var inCommand in inQueue.Reader.ReadAllAsync(linkedCts.Token))
                 {
-                    if ((DateTime.UtcNow - start).TotalMilliseconds > millisecondsToWaitBetweenResponses)
+                    if (inCommand is null || inCommand.RequestId != command.RequestId)
+                        continue;
+
+                    timeoutCts.CancelAfter(millisecondsToWaitBetweenResponses); // Reset timeout on each relevant message
+
+                    if (inCommand.Name == typeof(ResponseT).Name)
                     {
-                        run = false;
-                        Program.App.Logger.LogError($"DAISI ORC: Timeout waiting for response from host \"{session.CreateResponse.Host.Name}\": {typeof(ResponseT).Name}");
-                        return Task.CompletedTask;
-                    }
-                    try
-                    {
-                        if (inQueue.TryDequeue(out var inCommand))
+                        if (inCommand.Payload.TryUnpack<ResponseT>(out var response))
                         {
-                            if (inCommand is null || inCommand.RequestId != command.RequestId)
-                                continue;
-
-                            start = DateTime.UtcNow;
-
-                            if (inCommand.Name == typeof(ResponseT).Name)
-                            {
-                                if (inCommand.Payload.TryUnpack<ResponseT>(out response))
-                                {
-                                    await responseStream.WriteAsync(response);
-                                }
-                                else
-                                    Program.App.Logger.LogError($"ORC Could not unpack {inCommand.Name} payload into {typeof(ResponseT).Name}");
-                            }
-                            else if (inCommand.Name == "ENDSTREAM")
-                            {
-                                //remove the END command from the queue.
-                                run = false;
-                                return Task.CompletedTask;
-                            }
+                            await responseStream.WriteAsync(response);
                         }
+                        else
+                            Program.App.Logger.LogError($"ORC Could not unpack {inCommand.Name} payload into {typeof(ResponseT).Name}");
                     }
-                    catch (Exception exc)
+                    else if (inCommand.Name == "ENDSTREAM")
                     {
-                        Program.App.Logger.LogError($"ORC SendToHostAndStreamAsync ERROR: {exc.Message}");
-                        run = false;
-                        return Task.CompletedTask;
+                        return;
                     }
                 }
-
-                if (cancellationToken.IsCancellationRequested)
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                Command cancelCommand = new()
                 {
-                    Command cancelCommand = new()
-                    {
-                        Name = nameof(CancelStreamRequest),
-                        Payload = Any.Pack(new CancelStreamRequest { }),
-                        SessionId = session.Id,
-                        RequestId = command.RequestId
-                    };
-                    outQueue.Enqueue(cancelCommand);
-
-                    run = false;
-                }
-
-                return Task.CompletedTask;
-            }, cancellationToken );
-
-
-
+                    Name = nameof(CancelStreamRequest),
+                    Payload = Any.Pack(new CancelStreamRequest { }),
+                    SessionId = session.Id,
+                    RequestId = command.RequestId
+                };
+                outQueue.Writer.TryWrite(cancelCommand);
+            }
+            catch (OperationCanceledException)
+            {
+                Program.App.Logger.LogError($"DAISI ORC: Timeout waiting for response from host \"{session.CreateResponse.Host.Name}\": {typeof(ResponseT).Name}");
+            }
+            catch (Exception exc)
+            {
+                Program.App.Logger.LogError($"ORC SendToHostAndStreamAsync ERROR: {exc.Message}");
+            }
         }
 
         internal static async Task UnregisterAllAsync(Cosmo cosmo, IConfiguration configuration)
@@ -339,7 +299,7 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
                         Payload = Any.Pack(new CloseSessionRequest() { Id = sessionId }),
                         SessionId = sessionId
                     };
-                    outQueue.Enqueue(command);
+                    outQueue.Writer.TryWrite(command);
                 }
             }
         }
@@ -357,15 +317,13 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
         /// Key is the ID for the session that will receive these outgoing commands.
         /// These going to consumers in a session.
         /// </summary>
-
-        public ConcurrentDictionary<string, ConcurrentQueue<Command>> SessionOutgoingQueues = new ConcurrentDictionary<string, ConcurrentQueue<Command>>();
+        public ConcurrentDictionary<string, Channel<Command>> SessionOutgoingQueues = new();
 
         /// <summary>
         /// Key is the ID for the session that is sending the Orc commands.
         /// These come from consumers in a session.
         /// </summary>
-        public ConcurrentDictionary<string, ConcurrentQueue<Command>> SessionIncomingQueues = new ConcurrentDictionary<string, ConcurrentQueue<Command>>();
-
+        public ConcurrentDictionary<string, Channel<Command>> SessionIncomingQueues = new();
 
         /// <summary>
         /// These are commands coming in from the Host.
@@ -375,42 +333,57 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
         /// <summary>
         /// These are commands going out to the Host.
         /// </summary>
-        public ConcurrentQueue<Command> OutgoingQueue { get; set; } = new ConcurrentQueue<Command>();
+        public Channel<Command> OutgoingQueue { get; set; } = Channel.CreateUnbounded<Command>();
 
         public void AddSession(DaisiSession session)
         {
-            SessionOutgoingQueues.TryAdd(session.Id, new ConcurrentQueue<Command>());
-            SessionIncomingQueues.TryAdd(session.Id, new ConcurrentQueue<Command>());
+            SessionOutgoingQueues.TryAdd(session.Id, Channel.CreateUnbounded<Command>());
+            SessionIncomingQueues.TryAdd(session.Id, Channel.CreateUnbounded<Command>());
         }
 
         internal void CloseSession(string sessionId)
         {
-            SessionOutgoingQueues.TryRemove(sessionId, out var removedOutQ);
-            SessionIncomingQueues.TryRemove(sessionId, out var removedInQ);
+            if (SessionOutgoingQueues.TryRemove(sessionId, out var removedOutQ))
+                removedOutQ.Writer.Complete();
+            if (SessionIncomingQueues.TryRemove(sessionId, out var removedInQ))
+                removedInQ.Writer.Complete();
         }
 
         internal async Task SendOutgoingCommandsAsync(IServerStreamWriter<Command> responseStream, CancellationToken cancellationToken)
         {
-            //_ = Task.Run(async () =>
-            //{
-            if (OutgoingQueue.TryDequeue(out var hostCommand))
-            {
-                logger.LogInformation($"ORC COMMAND {hostCommand.Name} to {Host.Name}");
-                await responseStream.WriteAsync(hostCommand, cancellationToken);
-            }
-            //});
+            // Merge all outgoing channels into a single stream to the host.
+            // Use ChannelReader.ReadAllAsync to await commands without polling.
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-            //_ = Task.Run(async () =>
-            //{
+            // Start background tasks for each session's outgoing queue
+            var sessionTasks = new List<Task>();
+
+            // Forward session outgoing commands to the merged outgoing channel
             foreach (var sessionOut in SessionOutgoingQueues)
             {
-                if (sessionOut.Value.TryDequeue(out var sessionCommand))
+                sessionTasks.Add(Task.Run(async () =>
                 {
-                    logger.LogInformation($"SESSION COMMAND {sessionCommand.Name} SENT OUT TO {Host.Name}:{sessionCommand.SessionId}");
-                    await responseStream.WriteAsync(sessionCommand, cancellationToken);
+                    try
+                    {
+                        await foreach (var cmd in sessionOut.Value.Reader.ReadAllAsync(cts.Token))
+                        {
+                            OutgoingQueue.Writer.TryWrite(cmd);
+                        }
+                    }
+                    catch (OperationCanceledException) { }
+                }, cts.Token));
+            }
+
+            // Read from the merged outgoing channel and send to host
+            try
+            {
+                await foreach (var command in OutgoingQueue.Reader.ReadAllAsync(cts.Token))
+                {
+                    logger.LogInformation($"COMMAND {command.Name} SENT OUT TO {Host.Name}:{command.SessionId}");
+                    await responseStream.WriteAsync(command);
                 }
             }
-            //});
+            catch (OperationCanceledException) { }
         }
     }
 }
