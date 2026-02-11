@@ -34,6 +34,7 @@ public partial class Program
         builder.Services.AddScoped<AuthService>();
         builder.Services.AddScoped<OrcService>();
         builder.Services.AddScoped<CreditService>();
+        builder.Services.AddSingleton<GitHubReleaseService>();
 
         builder.Services.AddTransient<HeartbeatRequestCommandHandler>();
         builder.Services.AddTransient<SessionIncomingQueueHandler>();
@@ -68,6 +69,7 @@ public partial class Program
         app.MapGrpcService<SessionsRPC>();
         app.MapGrpcService<CreditsRPC>();
         app.MapGrpcService<ReleasesRPC>();
+        app.MapGrpcService<SkillsRPC>();
 
 #if DEBUG
         builder.Logging.AddDebug();

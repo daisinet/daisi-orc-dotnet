@@ -35,6 +35,18 @@ The `ReleasesRPC` gRPC service exposes CRUD operations: `Create`, `GetReleases`,
 
 During heartbeat and environment checks, the Orc queries the active release for the host's release group. If the host's version is older than the active release, an `UpdateRequiredRequest` is sent with the versioned blob URL. If no database release exists for the group, the system falls back to the `Daisi:MinimumHostVersion` config key for backward compatibility.
 
+#### One-Click Release Automation
+The ORC hosts the central orchestration workflow and the `TriggerRelease` gRPC endpoint. When a user clicks "Start Release" in the Manager, the ORC dispatches a GitHub Actions pipeline that handles SDK publish (if needed), ORC deploy, and Host release automatically.
+
+See **[ReleaseSetup.md](ReleaseSetup.md)** for the full setup guide — GitHub secrets, Azure federated identity, app settings, and verification steps.
+
+#### Coordinated Release Order (manual fallback)
+When proto or SDK changes land that affect ORC and Host, follow this order:
+1. Tag `daisi-sdk-dotnet` with `v*` (e.g. `v1.0.10`) — NuGet package publishes automatically to nuget.org
+2. Deploy ORC — includes SDK via ProjectReference, so it picks up changes immediately
+3. Tag `daisi-hosts-dotnet` with `beta-*` — workflow builds the host, uploads blob, writes release record
+4. Phased host rollout: beta → group1 → group2 → production
+
 
 ### Project - Daisi.Functions.CosmoDb
 This project should be hosted with access to the CosmoDb so that it can track CRUD operations on the db and keep references up to date as changes are made.

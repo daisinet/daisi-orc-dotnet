@@ -1,5 +1,6 @@
 using Daisi.Orc.Core.Data.Db;
 using Daisi.Orc.Core.Data.Models;
+using Daisi.Orc.Core.Services;
 using Daisi.Protos.V1;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
@@ -8,7 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 namespace Daisi.Orc.Grpc.RPCServices.V1
 {
     [Authorize]
-    public class ReleasesRPC(ILogger<ReleasesRPC> logger, Cosmo cosmo) : ReleasesProto.ReleasesProtoBase
+    public class ReleasesRPC(ILogger<ReleasesRPC> logger, Cosmo cosmo, GitHubReleaseService gitHubReleaseService) : ReleasesProto.ReleasesProtoBase
     {
         public override async Task<CreateReleaseResponse> Create(CreateReleaseRequest request, ServerCallContext context)
         {
@@ -69,6 +70,50 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             {
                 Release = MapToProto(release)
             };
+        }
+
+        public override async Task<TriggerReleaseResponse> TriggerRelease(TriggerReleaseRequest request, ServerCallContext context)
+        {
+            var version = DateTime.UtcNow.ToString("yyyy.MM.dd.HHmm");
+
+            logger.LogInformation("TriggerRelease requested: version={Version}, group={Group}, activate={Activate}",
+                version, request.ReleaseGroup, request.Activate);
+
+            try
+            {
+                var success = await gitHubReleaseService.TriggerOrchestrateReleaseAsync(
+                    version,
+                    request.ReleaseGroup,
+                    request.ReleaseNotes,
+                    request.Activate);
+
+                if (!success)
+                {
+                    return new TriggerReleaseResponse
+                    {
+                        Success = false,
+                        Version = version,
+                        ErrorMessage = "Failed to dispatch the release workflow. Check ORC logs for details."
+                    };
+                }
+
+                return new TriggerReleaseResponse
+                {
+                    Success = true,
+                    Version = version
+                };
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error triggering release workflow for version {Version}", version);
+
+                return new TriggerReleaseResponse
+                {
+                    Success = false,
+                    Version = version,
+                    ErrorMessage = $"Error triggering release: {ex.Message}"
+                };
+            }
         }
 
         private static HostReleaseInfo MapToProto(HostRelease release)

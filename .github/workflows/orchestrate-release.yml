@@ -1,0 +1,226 @@
+name: Orchestrate Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Unified version string (e.g. 2026.02.11.1430)'
+        required: true
+        type: string
+      release_group:
+        description: 'Release group to target'
+        required: true
+        type: choice
+        options:
+          - beta
+          - group1
+          - group2
+          - production
+      release_notes:
+        description: 'Release notes (optional)'
+        required: false
+        type: string
+      activate:
+        description: 'Activate the release immediately'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  check-sdk:
+    name: Check SDK Changes
+    runs-on: ubuntu-latest
+    outputs:
+      sdk_changed: ${{ steps.check.outputs.sdk_changed }}
+      sdk_version: ${{ steps.check.outputs.sdk_version }}
+    steps:
+      - name: Checkout daisi-sdk-dotnet
+        uses: actions/checkout@v4
+        with:
+          repository: daisinet/daisi-sdk-dotnet
+          token: ${{ secrets.RELEASE_PAT }}
+          fetch-depth: 0
+
+      - name: Check for SDK source changes since last tag
+        id: check
+        shell: bash
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null || echo "")
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No previous SDK tag found, marking as changed"
+            SDK_CHANGED="true"
+          else
+            CHANGES=$(git diff "$LATEST_TAG" --name-only -- Daisi.SDK/ | head -1)
+            if [ -n "$CHANGES" ]; then
+              SDK_CHANGED="true"
+              echo "SDK source changed since $LATEST_TAG"
+            else
+              SDK_CHANGED="false"
+              echo "No SDK source changes since $LATEST_TAG"
+            fi
+          fi
+
+          # Extract SDK version from csproj
+          SDK_VERSION=$(grep -oP '(?<=<Version>)[^<]+' Daisi.SDK/Daisi.SDK.csproj | head -1)
+          echo "sdk_changed=$SDK_CHANGED" >> "$GITHUB_OUTPUT"
+          echo "sdk_version=$SDK_VERSION" >> "$GITHUB_OUTPUT"
+          echo "SDK changed: $SDK_CHANGED, version: $SDK_VERSION"
+
+  release-sdk:
+    name: Release SDK (conditional)
+    needs: check-sdk
+    if: needs.check-sdk.outputs.sdk_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch SDK release workflow
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          gh workflow run release-sdk.yml \
+            --repo daisinet/daisi-sdk-dotnet \
+            --field version=${{ needs.check-sdk.outputs.sdk_version }}
+
+      - name: Wait for SDK release to complete
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        shell: bash
+        run: |
+          echo "Waiting for SDK release workflow to start..."
+          sleep 15
+
+          for i in $(seq 1 60); do
+            STATUS=$(gh run list \
+              --repo daisinet/daisi-sdk-dotnet \
+              --workflow release-sdk.yml \
+              --limit 1 \
+              --json status,conclusion \
+              --jq '.[0]')
+
+            RUN_STATUS=$(echo "$STATUS" | jq -r '.status')
+            RUN_CONCLUSION=$(echo "$STATUS" | jq -r '.conclusion')
+
+            echo "Attempt $i: status=$RUN_STATUS, conclusion=$RUN_CONCLUSION"
+
+            if [ "$RUN_STATUS" = "completed" ]; then
+              if [ "$RUN_CONCLUSION" = "success" ]; then
+                echo "SDK release completed successfully"
+                exit 0
+              else
+                echo "SDK release failed with conclusion: $RUN_CONCLUSION"
+                exit 1
+              fi
+            fi
+
+            sleep 30
+          done
+
+          echo "Timed out waiting for SDK release"
+          exit 1
+
+  deploy-orc:
+    name: Deploy ORC
+    needs: [check-sdk, release-sdk]
+    if: always() && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch ORC deploy workflow
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          gh workflow run deploy-orc.yml \
+            --repo daisinet/daisi-orc-dotnet \
+            --field version=${{ inputs.version }}
+
+      - name: Wait for ORC deploy to complete
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        shell: bash
+        run: |
+          echo "Waiting for ORC deploy workflow to start..."
+          sleep 15
+
+          for i in $(seq 1 60); do
+            STATUS=$(gh run list \
+              --repo daisinet/daisi-orc-dotnet \
+              --workflow deploy-orc.yml \
+              --limit 1 \
+              --json status,conclusion \
+              --jq '.[0]')
+
+            RUN_STATUS=$(echo "$STATUS" | jq -r '.status')
+            RUN_CONCLUSION=$(echo "$STATUS" | jq -r '.conclusion')
+
+            echo "Attempt $i: status=$RUN_STATUS, conclusion=$RUN_CONCLUSION"
+
+            if [ "$RUN_STATUS" = "completed" ]; then
+              if [ "$RUN_CONCLUSION" = "success" ]; then
+                echo "ORC deploy completed successfully"
+                exit 0
+              else
+                echo "ORC deploy failed with conclusion: $RUN_CONCLUSION"
+                exit 1
+              fi
+            fi
+
+            sleep 30
+          done
+
+          echo "Timed out waiting for ORC deploy"
+          exit 1
+
+  release-host:
+    name: Release Host
+    needs: deploy-orc
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch Host release workflow
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          gh workflow run release-host.yml \
+            --repo daisinet/daisi-hosts-dotnet \
+            --field version=${{ inputs.version }} \
+            --field release_group=${{ inputs.release_group }} \
+            --field activate=${{ inputs.activate }} \
+            --field required_orc_version=${{ inputs.version }} \
+            --field release_notes="${{ inputs.release_notes }}"
+
+      - name: Wait for Host release to complete
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        shell: bash
+        run: |
+          echo "Waiting for Host release workflow to start..."
+          sleep 15
+
+          for i in $(seq 1 60); do
+            STATUS=$(gh run list \
+              --repo daisinet/daisi-hosts-dotnet \
+              --workflow release-host.yml \
+              --limit 1 \
+              --json status,conclusion \
+              --jq '.[0]')
+
+            RUN_STATUS=$(echo "$STATUS" | jq -r '.status')
+            RUN_CONCLUSION=$(echo "$STATUS" | jq -r '.conclusion')
+
+            echo "Attempt $i: status=$RUN_STATUS, conclusion=$RUN_CONCLUSION"
+
+            if [ "$RUN_STATUS" = "completed" ]; then
+              if [ "$RUN_CONCLUSION" = "success" ]; then
+                echo "Host release completed successfully"
+                exit 0
+              else
+                echo "Host release failed with conclusion: $RUN_CONCLUSION"
+                exit 1
+              fi
+            fi
+
+            sleep 30
+          done
+
+          echo "Timed out waiting for Host release"
+          exit 1
