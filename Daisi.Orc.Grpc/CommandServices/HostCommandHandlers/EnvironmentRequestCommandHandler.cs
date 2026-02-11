@@ -1,4 +1,4 @@
-﻿using Daisi.Orc.Core.Data.Db;
+using Daisi.Orc.Core.Data.Db;
 using Daisi.Orc.Grpc.CommandServices.Containers;
 using Daisi.Protos.V1;
 using Google.Protobuf.WellKnownTypes;
@@ -41,31 +41,16 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
 
                     if (activeRelease != null)
                     {
-                        // Tandem release safety: skip if ORC version is too old
-                        if (!string.IsNullOrWhiteSpace(activeRelease.RequiredOrcVersion))
-                        {
-                            var orcVersionString = configuration.GetValue<string>("Daisi:OrcVersion");
-                            if (!string.IsNullOrWhiteSpace(orcVersionString))
-                            {
-                                var requiredOrcVersion = Version.Parse(activeRelease.RequiredOrcVersion);
-                                var currentOrcVersion = Version.Parse(orcVersionString);
-                                if (currentOrcVersion < requiredOrcVersion)
-                                {
-                                    logger.LogWarning("Skipping host update for {HostName}: ORC version {Current} < required {Required}", host.Name, orcVersionString, activeRelease.RequiredOrcVersion);
-                                    return;
-                                }
-                            }
-                        }
-
                         var currentVersion = Version.Parse(host.AppVersion);
                         var releaseVersion = Version.Parse(activeRelease.Version);
 
                         if (currentVersion < releaseVersion)
                         {
+                            // Send Channel so the host uses Velopack to self-update
                             responseQueue.TryWrite(new Command()
                             {
                                 Name = nameof(UpdateRequiredRequest),
-                                Payload = Any.Pack(new UpdateRequiredRequest() { HostAppUrl = activeRelease.DownloadUrl })
+                                Payload = Any.Pack(new UpdateRequiredRequest() { Channel = releaseGroup })
                             });
                         }
 
@@ -93,10 +78,11 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
 
                     if (currentVersion < minimumHostVersion)
                     {
+                        // Fallback also uses Channel-based updates
                         responseQueue.TryWrite(new Command()
                         {
                             Name = nameof(UpdateRequiredRequest),
-                            Payload = Any.Pack(new UpdateRequiredRequest() { HostAppUrl = $"https://daisi.blob.core.windows.net/releases/latest-desktop.zip" })
+                            Payload = Any.Pack(new UpdateRequiredRequest() { Channel = host.ReleaseGroup ?? "production" })
                         });
                     }
                 }

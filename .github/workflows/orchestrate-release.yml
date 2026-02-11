@@ -182,10 +182,9 @@ jobs:
         run: |
           gh workflow run release-host.yml \
             --repo daisinet/daisi-hosts-dotnet \
-            --field version=${{ inputs.version }} \
+            --field timestamp_version=${{ inputs.version }} \
             --field release_group=${{ inputs.release_group }} \
             --field activate=${{ inputs.activate }} \
-            --field required_orc_version=${{ inputs.version }} \
             --field release_notes="${{ inputs.release_notes }}"
 
       - name: Wait for Host release to complete
