@@ -25,4 +25,5 @@ public class Skill
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public int DownloadCount { get; set; }
     public string SystemPromptTemplate { get; set; } = string.Empty;
+    public bool IsRequired { get; set; } = false;
 }

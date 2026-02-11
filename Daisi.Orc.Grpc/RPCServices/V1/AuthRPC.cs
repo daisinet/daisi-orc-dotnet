@@ -102,6 +102,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                     response.response.UserName = user.Name;
                     response.response.UserRole = user.Role;
                     response.response.UserAccountId = user.AccountId;
+                    logger.LogInformation($"ValidateClientKey: User={user.Name}, Role={user.Role} ({(int)user.Role})");
                 }
             }
 

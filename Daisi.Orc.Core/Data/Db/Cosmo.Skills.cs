@@ -120,6 +120,21 @@ public partial class Cosmo
         await container.DeleteItemAsync<Skill>(id, new PartitionKey(accountId));
     }
 
+    public async Task<List<Skill>> GetRequiredSkillsAsync()
+    {
+        var container = await GetContainerAsync(SkillsContainerName);
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.IsRequired = true AND c.Status = 'Approved'");
+
+        var skills = new List<Skill>();
+        using var resultSet = container.GetItemQueryIterator<Skill>(query);
+        while (resultSet.HasMoreResults)
+        {
+            var response = await resultSet.ReadNextAsync();
+            skills.AddRange(response);
+        }
+        return skills;
+    }
+
     // --- Installed Skills ---
 
     public async Task InstallSkillAsync(string accountId, string skillId)
