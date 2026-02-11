@@ -38,7 +38,9 @@ During heartbeat and environment checks, the Orc queries the active release for 
 #### One-Click Release Automation
 The ORC hosts the central orchestration workflow and the `TriggerRelease` gRPC endpoint. When a user clicks "Start Release" in the Manager, the ORC dispatches a GitHub Actions pipeline that handles SDK publish (if needed), ORC deploy, and Host release automatically.
 
-See **[ReleaseSetup.md](ReleaseSetup.md)** for the full setup guide — GitHub secrets, Azure federated identity, app settings, and verification steps.
+See **[ReleaseSetup.md](ReleaseSetup.md)** for the full setup guide, or jump directly to:
+- **[GitPATSetup.md](GitPATSetup.md)** — Step-by-step GitHub PAT creation for `SDK_PAT` and `RELEASE_PAT`
+- **[AzureADSetup.md](AzureADSetup.md)** — Azure AD app registration, federated credentials, and RBAC roles
 
 #### Coordinated Release Order (manual fallback)
 When proto or SDK changes land that affect ORC and Host, follow this order:

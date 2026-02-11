@@ -2,11 +2,16 @@
 
 This guide walks through configuring the one-click release system. The ORC is the central hub — it hosts the orchestration workflow and the gRPC endpoint that the Manager calls to start a release.
 
+## Detailed Setup Guides
+
+- **[GitPATSetup.md](GitPATSetup.md)** — Step-by-step instructions for creating `SDK_PAT` and `RELEASE_PAT` in the GitHub portal
+- **[AzureADSetup.md](AzureADSetup.md)** — Step-by-step instructions for Azure AD app registration, federated credentials, and RBAC role assignments
+
 ## Prerequisites
 
 - An Azure App Service provisioned for the ORC (e.g. `daisi-orc`)
-- A GitHub PAT with `repo` and `actions` scope (used for cross-repo workflow dispatch)
-- Azure federated identity (OIDC) configured for GitHub Actions (same pattern as the Manager)
+- A GitHub PAT with `repo` and `actions` scope (used for cross-repo workflow dispatch) — see [GitPATSetup.md](GitPATSetup.md)
+- Azure federated identity (OIDC) configured for GitHub Actions — see [AzureADSetup.md](AzureADSetup.md)
 
 ---
 
