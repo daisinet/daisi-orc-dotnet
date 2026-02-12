@@ -20,13 +20,14 @@ namespace Daisi.Orc.Tests.CommandServices
         [Fact]
         public async Task SessionIncomingQueueHandler_RoutesToCorrectSessionChannel()
         {
-            // Setup HostsOnline with a host and session
+            // Setup HostsOnline with a host and session (unique ID to avoid parallel test collisions)
+            string hostId = $"ohct-{Guid.NewGuid():N}";
             var host = new HostOnline(_logger)
             {
-                Host = new Daisi.Orc.Core.Data.Models.Host { Id = "h1", Name = "TestHost" }
+                Host = new Daisi.Orc.Core.Data.Models.Host { Id = hostId, Name = "TestHost" }
             };
             host.AddSession(new DaisiSession { Id = "sess-1" });
-            HostContainer.HostsOnline.TryAdd("h1", host);
+            HostContainer.HostsOnline.TryAdd(hostId, host);
 
             try
             {
@@ -44,7 +45,7 @@ namespace Daisi.Orc.Tests.CommandServices
                     Payload = Any.Pack(new SendInferenceResponse { Content = "test" })
                 };
 
-                await handler.HandleAsync("h1", command, responseChannel.Writer);
+                await handler.HandleAsync(hostId, command, responseChannel.Writer);
 
                 // Verify the command was routed to the session's incoming queue
                 var routed = await host.SessionIncomingQueues["sess-1"].Reader.ReadAsync();
@@ -53,7 +54,7 @@ namespace Daisi.Orc.Tests.CommandServices
             }
             finally
             {
-                HostContainer.HostsOnline.TryRemove("h1", out _);
+                HostContainer.HostsOnline.TryRemove(hostId, out _);
             }
         }
 

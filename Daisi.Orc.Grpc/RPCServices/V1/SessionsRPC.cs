@@ -59,7 +59,10 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
         public async override Task<ClaimSessionResponse> Claim(ClaimSessionRequest request, ServerCallContext context)
         {
             if (!SessionContainer.TryGet(request.Id, out var session))
-                throw new Exception("DAISI: Invalid Session ID");
+            {
+                logger.LogWarning("Claim failed: session {SessionId} not found", request.Id);
+                return new ClaimSessionResponse() { Success = false };
+            }
 
             session.ClaimRequest = request;
             session.ClaimClientKey = context.GetClientKey();
@@ -76,6 +79,13 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 throw new Exception("DAISI: Invalid Session ID");
 
             var response = await HostContainer.SendToHostAndWaitAsync<ConnectRequest, ConnectResponse>(session, request);
+
+            if (response is null)
+                throw new Exception("DAISI: Host did not respond to connection request.");
+
+            if (string.IsNullOrWhiteSpace(response.Id))
+                throw new Exception("DAISI: Host rejected the connection request.");
+
             return response;
         }
 
