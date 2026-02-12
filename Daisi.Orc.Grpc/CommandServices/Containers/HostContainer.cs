@@ -5,6 +5,7 @@ using Daisi.Orc.Grpc.Authentication;
 using Daisi.Orc.Grpc.Background;
 using Daisi.Orc.Grpc.RPCServices.V1;
 using Daisi.Protos.V1;
+using Daisi.SDK.Clients.V1;
 using Daisi.SDK.Extensions;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
@@ -47,6 +48,9 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
                 await cosmo.PatchHostForConnectionAsync(host);
 
                 await UpdateOrcConnectionCountInDb(cosmo, configuration);
+
+                // Notify File Manager that host came online
+                await NotifyDriveHostOnlineAsync(hostId, host.AccountId, configuration);
 
                 Program.App.Logger.LogCritical($"Registered Host {host.Name}");
             }
@@ -96,6 +100,9 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
                     await cosmo.PatchHostForConnectionAsync(host);
 
                     await UpdateOrcConnectionCountInDb(cosmo, configuration);
+
+                    // Notify File Manager that host went offline
+                    await NotifyDriveHostOfflineAsync(host.Id, host.AccountId, configuration);
 
                     Program.App.Logger.LogCritical($"Unregistered Host {host.Name}");
                 }
@@ -284,6 +291,46 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
                 inmem.PeerConnect = host.PeerConnect;
                 inmem.DirectConnect = host.DirectConnect;
                 inmem.Name = host.Name;
+            }
+        }
+
+        private static async Task NotifyDriveHostOfflineAsync(string hostId, string accountId, IConfiguration configuration)
+        {
+            try
+            {
+                var fileManagerUrl = configuration.GetValue<string>("Daisi:FileManagerUrl");
+                if (string.IsNullOrEmpty(fileManagerUrl)) return;
+
+                var client = new DriveNotificationClient(fileManagerUrl);
+                await client.HostWentOfflineAsync(new HostOfflineNotification
+                {
+                    HostId = hostId,
+                    AccountId = accountId
+                });
+            }
+            catch (Exception ex)
+            {
+                Program.App.Logger.LogError(ex, "Failed to notify File Manager of host offline: {HostId}", hostId);
+            }
+        }
+
+        private static async Task NotifyDriveHostOnlineAsync(string hostId, string accountId, IConfiguration configuration)
+        {
+            try
+            {
+                var fileManagerUrl = configuration.GetValue<string>("Daisi:FileManagerUrl");
+                if (string.IsNullOrEmpty(fileManagerUrl)) return;
+
+                var client = new DriveNotificationClient(fileManagerUrl);
+                await client.HostCameOnlineAsync(new HostOnlineNotification
+                {
+                    HostId = hostId,
+                    AccountId = accountId
+                });
+            }
+            catch (Exception ex)
+            {
+                Program.App.Logger.LogError(ex, "Failed to notify File Manager of host online: {HostId}", hostId);
             }
         }
 
