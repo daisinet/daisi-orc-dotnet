@@ -5,6 +5,7 @@ using Daisi.Orc.Grpc.Authentication;
 using Daisi.Orc.Grpc.Background;
 using Daisi.Orc.Grpc.RPCServices.V1;
 using Daisi.Protos.V1;
+using Daisi.SDK.Clients.V1;
 using Daisi.SDK.Extensions;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
@@ -47,6 +48,9 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
                 await cosmo.PatchHostForConnectionAsync(host);
 
                 await UpdateOrcConnectionCountInDb(cosmo, configuration);
+
+                // Notify File Manager that host came online
+                await NotifyDriveHostOnlineAsync(hostId, host.AccountId, configuration);
 
                 Program.App.Logger.LogCritical($"Registered Host {host.Name}");
             }
@@ -97,6 +101,9 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
 
                     await UpdateOrcConnectionCountInDb(cosmo, configuration);
 
+                    // Notify File Manager that host went offline
+                    await NotifyDriveHostOfflineAsync(host.Id, host.AccountId, configuration);
+
                     Program.App.Logger.LogCritical($"Unregistered Host {host.Name}");
                 }
             }
@@ -146,31 +153,28 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
             if (!hostOnline.SessionOutgoingQueues.TryGetValue(session.Id, out var outQueue))
                 throw new Exception($"DAISI: Could not find host's outgoing command queue for {session.Id}");
 
-            if (!hostOnline.SessionIncomingQueues.TryGetValue(session.Id, out var inQueue))
-                throw new Exception($"DAISI: Could not find host's incoming command queue for {session.Id}");
-
             string id = $"req-{StringExtensions.Random()}";
-            Program.App.Logger.LogInformation($"Enqueued request {typeof(RequestT).Name} with ReqID {id} to {session?.CreateResponse?.Host?.Name}");
-
-            Command command = new()
-            {
-                Name = typeof(RequestT).Name,
-                Payload = Any.Pack(request),
-                SessionId = session.Id,
-                RequestId = id
-            };
-            outQueue.Writer.TryWrite(command);
-
-            // Listen for the response using ChannelReader with timeout.
-            using var cts = new CancellationTokenSource(millisecondsToWait);
+            var requestChannel = Channel.CreateUnbounded<Command>();
+            hostOnline.RequestChannels.TryAdd(id, requestChannel);
 
             try
             {
-                await foreach (var inCommand in inQueue.Reader.ReadAllAsync(cts.Token))
-                {
-                    if (inCommand is null || inCommand.RequestId != command.RequestId)
-                        continue;
+                Program.App.Logger.LogInformation($"Enqueued request {typeof(RequestT).Name} with ReqID {id} to {session?.CreateResponse?.Host?.Name}");
 
+                Command command = new()
+                {
+                    Name = typeof(RequestT).Name,
+                    Payload = Any.Pack(request),
+                    SessionId = session.Id,
+                    RequestId = id
+                };
+                outQueue.Writer.TryWrite(command);
+
+                // Listen for the response on the per-request channel with timeout.
+                using var cts = new CancellationTokenSource(millisecondsToWait);
+
+                await foreach (var inCommand in requestChannel.Reader.ReadAllAsync(cts.Token))
+                {
                     cts.CancelAfter(millisecondsToWait); // Reset timeout on each relevant message
 
                     if (inCommand.Name == typeof(ResponseT).Name)
@@ -190,6 +194,10 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
             {
                 Program.App.Logger.LogError($"SendToHostAndWaitAsync ERROR: {exc.Message}");
             }
+            finally
+            {
+                hostOnline.RequestChannels.TryRemove(id, out _);
+            }
 
             return default;
         }
@@ -204,30 +212,28 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
             if (!hostOnline.SessionOutgoingQueues.TryGetValue(session.Id, out var outQueue))
                 throw new Exception($"DAISI: Could not find host's outgoing command queue for {session.Id}");
 
-            if (!hostOnline.SessionIncomingQueues.TryGetValue(session.Id, out var inQueue))
-                throw new Exception($"DAISI: Could not find host's incoming command queue for {session.Id}");
-
-            // Queue the HostManager to send the command to the Host
-            Command command = new()
-            {
-                Name = typeof(RequestT).Name,
-                Payload = Any.Pack(request),
-                SessionId = session.Id,
-                RequestId = $"req-{StringExtensions.Random()}"
-            };
-            outQueue.Writer.TryWrite(command);
-
-            // Listen for the response using ChannelReader with timeout.
-            using var timeoutCts = new CancellationTokenSource(millisecondsToWaitBetweenResponses);
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+            string requestId = $"req-{StringExtensions.Random()}";
+            var requestChannel = Channel.CreateUnbounded<Command>();
+            hostOnline.RequestChannels.TryAdd(requestId, requestChannel);
 
             try
             {
-                await foreach (var inCommand in inQueue.Reader.ReadAllAsync(linkedCts.Token))
+                // Queue the HostManager to send the command to the Host
+                Command command = new()
                 {
-                    if (inCommand is null || inCommand.RequestId != command.RequestId)
-                        continue;
+                    Name = typeof(RequestT).Name,
+                    Payload = Any.Pack(request),
+                    SessionId = session.Id,
+                    RequestId = requestId
+                };
+                outQueue.Writer.TryWrite(command);
 
+                // Listen for the response on the per-request channel with timeout.
+                using var timeoutCts = new CancellationTokenSource(millisecondsToWaitBetweenResponses);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+                await foreach (var inCommand in requestChannel.Reader.ReadAllAsync(linkedCts.Token))
+                {
                     timeoutCts.CancelAfter(millisecondsToWaitBetweenResponses); // Reset timeout on each relevant message
 
                     if (inCommand.Name == typeof(ResponseT).Name)
@@ -252,7 +258,7 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
                     Name = nameof(CancelStreamRequest),
                     Payload = Any.Pack(new CancelStreamRequest { }),
                     SessionId = session.Id,
-                    RequestId = command.RequestId
+                    RequestId = requestId
                 };
                 outQueue.Writer.TryWrite(cancelCommand);
             }
@@ -263,6 +269,10 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
             catch (Exception exc)
             {
                 Program.App.Logger.LogError($"ORC SendToHostAndStreamAsync ERROR: {exc.Message}");
+            }
+            finally
+            {
+                hostOnline.RequestChannels.TryRemove(requestId, out _);
             }
         }
 
@@ -284,6 +294,46 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
                 inmem.PeerConnect = host.PeerConnect;
                 inmem.DirectConnect = host.DirectConnect;
                 inmem.Name = host.Name;
+            }
+        }
+
+        private static async Task NotifyDriveHostOfflineAsync(string hostId, string accountId, IConfiguration configuration)
+        {
+            try
+            {
+                var fileManagerUrl = configuration.GetValue<string>("Daisi:FileManagerUrl");
+                if (string.IsNullOrEmpty(fileManagerUrl)) return;
+
+                var client = new DriveNotificationClient(fileManagerUrl);
+                await client.HostWentOfflineAsync(new HostOfflineNotification
+                {
+                    HostId = hostId,
+                    AccountId = accountId
+                });
+            }
+            catch (Exception ex)
+            {
+                Program.App.Logger.LogError(ex, "Failed to notify File Manager of host offline: {HostId}", hostId);
+            }
+        }
+
+        private static async Task NotifyDriveHostOnlineAsync(string hostId, string accountId, IConfiguration configuration)
+        {
+            try
+            {
+                var fileManagerUrl = configuration.GetValue<string>("Daisi:FileManagerUrl");
+                if (string.IsNullOrEmpty(fileManagerUrl)) return;
+
+                var client = new DriveNotificationClient(fileManagerUrl);
+                await client.HostCameOnlineAsync(new HostOnlineNotification
+                {
+                    HostId = hostId,
+                    AccountId = accountId
+                });
+            }
+            catch (Exception ex)
+            {
+                Program.App.Logger.LogError(ex, "Failed to notify File Manager of host online: {HostId}", hostId);
             }
         }
 
@@ -324,6 +374,12 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
         /// These come from consumers in a session.
         /// </summary>
         public ConcurrentDictionary<string, Channel<Command>> SessionIncomingQueues = new();
+
+        /// <summary>
+        /// Per-request channels for routing responses directly to the waiting request.
+        /// Key is the RequestId, value is the channel for that specific request.
+        /// </summary>
+        public ConcurrentDictionary<string, Channel<Command>> RequestChannels = new();
 
         /// <summary>
         /// These are commands coming in from the Host.
