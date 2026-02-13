@@ -52,19 +52,30 @@ jobs:
           if [ -z "$LATEST_TAG" ]; then
             echo "No previous SDK tag found, marking as changed"
             SDK_CHANGED="true"
+            # No tag baseline — use csproj version as the last-published version and increment patch
+            BASE_VERSION=$(grep -oP '(?<=<Version>)[^<]+' Daisi.SDK/Daisi.SDK.csproj | head -1)
+            MAJOR=$(echo "$BASE_VERSION" | cut -d. -f1)
+            MINOR=$(echo "$BASE_VERSION" | cut -d. -f2)
+            PATCH=$(echo "$BASE_VERSION" | cut -d. -f3)
+            SDK_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
           else
             CHANGES=$(git diff "$LATEST_TAG" --name-only -- Daisi.SDK/ | head -1)
             if [ -n "$CHANGES" ]; then
               SDK_CHANGED="true"
               echo "SDK source changed since $LATEST_TAG"
+              # Increment patch from the last-tagged version
+              TAG_VERSION="${LATEST_TAG#v}"
+              MAJOR=$(echo "$TAG_VERSION" | cut -d. -f1)
+              MINOR=$(echo "$TAG_VERSION" | cut -d. -f2)
+              PATCH=$(echo "$TAG_VERSION" | cut -d. -f3)
+              SDK_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
             else
               SDK_CHANGED="false"
               echo "No SDK source changes since $LATEST_TAG"
+              SDK_VERSION="${LATEST_TAG#v}"
             fi
           fi
 
-          # Extract SDK version from csproj
-          SDK_VERSION=$(grep -oP '(?<=<Version>)[^<]+' Daisi.SDK/Daisi.SDK.csproj | head -1)
           echo "sdk_changed=$SDK_CHANGED" >> "$GITHUB_OUTPUT"
           echo "sdk_version=$SDK_VERSION" >> "$GITHUB_OUTPUT"
           echo "SDK changed: $SDK_CHANGED, version: $SDK_VERSION"
