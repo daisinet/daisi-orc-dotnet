@@ -35,18 +35,6 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
             {
                 var releaseGroup = host.ReleaseGroup ?? "production";
 
-                // TODO: Re-enable update notifications once all hosts are on Velopack.
-                // Legacy hosts receive UpdateRequiredRequest but only read HostAppUrl (not Channel).
-                // With Velopack releases, HostAppUrl is empty, causing legacy hosts to crash with
-                // "An invalid request URI was provided". Once all hosts are manually updated to the
-                // Velopack build, set Daisi:EnableUpdateNotifications = true to re-enable.
-                var enableUpdates = configuration.GetValue<bool>("Daisi:EnableUpdateNotifications");
-                if (!enableUpdates)
-                {
-                    logger.LogDebug("Update notifications disabled (Daisi:EnableUpdateNotifications = false). Skipping update check for host {HostId}.", host.Id);
-                    return;
-                }
-
                 try
                 {
                     var activeRelease = await cosmo.GetActiveReleaseAsync(releaseGroup);
@@ -58,10 +46,19 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
 
                         if (currentVersion < releaseVersion)
                         {
+                            var rid = MapOperatingSystemToRid(host.OperatingSystem);
+                            var hostAppUrl = $"{activeRelease.DownloadUrl}/{rid}/DaisiHost-latest.zip";
+
+                            // Send both Channel (for Velopack hosts) and HostAppUrl (for legacy hosts).
+                            // New hosts check Channel first; legacy hosts read HostAppUrl.
                             responseQueue.TryWrite(new Command()
                             {
                                 Name = nameof(UpdateRequiredRequest),
-                                Payload = Any.Pack(new UpdateRequiredRequest() { Channel = releaseGroup })
+                                Payload = Any.Pack(new UpdateRequiredRequest()
+                                {
+                                    Channel = releaseGroup,
+                                    HostAppUrl = hostAppUrl
+                                })
                             });
                         }
 
@@ -102,6 +99,17 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
                 //Mobile Update Check
 
             }
+        }
+
+        private static string MapOperatingSystemToRid(string operatingSystem)
+        {
+            return operatingSystem switch
+            {
+                "Windows" => "win-x64",
+                "Linux" => "linux-x64",
+                "MacOS" or "MacCatalyst" => "osx-x64",
+                _ => "win-x64"
+            };
         }
     }
 }
