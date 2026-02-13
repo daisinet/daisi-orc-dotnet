@@ -7,6 +7,7 @@ using Daisi.Orc.Grpc.CommandServices.Containers;
 using Daisi.Orc.Grpc.CommandServices.Handlers;
 using Daisi.Orc.Grpc.CommandServices.HostCommandHandlers;
 using Daisi.Orc.Grpc.RPCServices.V1;
+using Daisi.Orc.Grpc.Services;
 using Daisi.SDK.Extensions;
 using Daisi.SDK.Web.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -34,6 +35,7 @@ public partial class Program
         builder.Services.AddScoped<AuthService>();
         builder.Services.AddScoped<OrcService>();
         builder.Services.AddScoped<CreditService>();
+        builder.Services.AddScoped<MarketplaceService>();
         builder.Services.AddSingleton<GitHubReleaseService>();
 
         builder.Services.AddTransient<HeartbeatRequestCommandHandler>();
@@ -52,6 +54,7 @@ public partial class Program
 
         builder.Services.AddHostedService<SessionCleanupService>();
         builder.Services.AddHostedService<UptimeCreditService>();
+        builder.Services.AddHostedService<SubscriptionRenewalService>();
 
         var app = App = builder.Build();
 
@@ -70,6 +73,7 @@ public partial class Program
         app.MapGrpcService<CreditsRPC>();
         app.MapGrpcService<ReleasesRPC>();
         app.MapGrpcService<SkillsRPC>();
+        app.MapGrpcService<MarketplaceRPC>();
 
 #if DEBUG
         builder.Logging.AddDebug();
