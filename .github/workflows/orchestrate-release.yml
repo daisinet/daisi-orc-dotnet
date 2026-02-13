@@ -185,6 +185,7 @@ jobs:
   release-host:
     name: Release Host
     needs: deploy-orc
+    if: always() && !failure() && !cancelled()
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch Host release workflow
