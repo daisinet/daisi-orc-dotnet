@@ -35,6 +35,18 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
             {
                 var releaseGroup = host.ReleaseGroup ?? "production";
 
+                // TODO: Re-enable update notifications once all hosts are on Velopack.
+                // Legacy hosts receive UpdateRequiredRequest but only read HostAppUrl (not Channel).
+                // With Velopack releases, HostAppUrl is empty, causing legacy hosts to crash with
+                // "An invalid request URI was provided". Once all hosts are manually updated to the
+                // Velopack build, set Daisi:EnableUpdateNotifications = true to re-enable.
+                var enableUpdates = configuration.GetValue<bool>("Daisi:EnableUpdateNotifications");
+                if (!enableUpdates)
+                {
+                    logger.LogDebug("Update notifications disabled (Daisi:EnableUpdateNotifications = false). Skipping update check for host {HostId}.", host.Id);
+                    return;
+                }
+
                 try
                 {
                     var activeRelease = await cosmo.GetActiveReleaseAsync(releaseGroup);
@@ -46,9 +58,6 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
 
                         if (currentVersion < releaseVersion)
                         {
-                            // Send Channel so Velopack-aware hosts can self-update.
-                            // Legacy hosts that only read HostAppUrl will ignore this
-                            // and must be updated manually to the Velopack version first.
                             responseQueue.TryWrite(new Command()
                             {
                                 Name = nameof(UpdateRequiredRequest),
@@ -80,7 +89,6 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
 
                     if (currentVersion < minimumHostVersion)
                     {
-                        // Fallback also uses Channel-based updates
                         responseQueue.TryWrite(new Command()
                         {
                             Name = nameof(UpdateRequiredRequest),
