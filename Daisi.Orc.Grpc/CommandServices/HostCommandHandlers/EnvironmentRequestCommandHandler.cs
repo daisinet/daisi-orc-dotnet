@@ -46,15 +46,13 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
 
                         if (currentVersion < releaseVersion)
                         {
-                            // Send Channel for Velopack-aware hosts, and HostAppUrl for legacy hosts
+                            // Send Channel so Velopack-aware hosts can self-update.
+                            // Legacy hosts that only read HostAppUrl will ignore this
+                            // and must be updated manually to the Velopack version first.
                             responseQueue.TryWrite(new Command()
                             {
                                 Name = nameof(UpdateRequiredRequest),
-                                Payload = Any.Pack(new UpdateRequiredRequest()
-                                {
-                                    Channel = releaseGroup,
-                                    HostAppUrl = activeRelease.DownloadUrl
-                                })
+                                Payload = Any.Pack(new UpdateRequiredRequest() { Channel = releaseGroup })
                             });
                         }
 
