@@ -39,15 +39,46 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
                 {
                     var activeRelease = await cosmo.GetActiveReleaseAsync(releaseGroup);
 
-                    if (activeRelease != null)
+                    // Production releases act as a version floor for all groups.
+                    // If the host is in a non-production group, also check the production
+                    // release and use whichever has the higher version.
+                    var chosenRelease = activeRelease;
+                    var chosenChannel = releaseGroup;
+
+                    if (releaseGroup != "production")
+                    {
+                        var productionRelease = await cosmo.GetActiveReleaseAsync("production");
+
+                        if (productionRelease != null)
+                        {
+                            if (chosenRelease == null)
+                            {
+                                chosenRelease = productionRelease;
+                                chosenChannel = "production";
+                            }
+                            else
+                            {
+                                var groupVersion = Version.Parse(chosenRelease.Version);
+                                var prodVersion = Version.Parse(productionRelease.Version);
+
+                                if (prodVersion > groupVersion)
+                                {
+                                    chosenRelease = productionRelease;
+                                    chosenChannel = "production";
+                                }
+                            }
+                        }
+                    }
+
+                    if (chosenRelease != null)
                     {
                         var currentVersion = Version.Parse(host.AppVersion);
-                        var releaseVersion = Version.Parse(activeRelease.Version);
+                        var releaseVersion = Version.Parse(chosenRelease.Version);
 
                         if (currentVersion < releaseVersion)
                         {
                             var rid = MapOperatingSystemToRid(host.OperatingSystem);
-                            var hostAppUrl = $"{activeRelease.DownloadUrl}/{rid}/DaisiHost-latest.zip";
+                            var hostAppUrl = $"{chosenRelease.DownloadUrl}/{rid}/DaisiHost-latest.zip";
 
                             // Send both Channel (for Velopack hosts) and HostAppUrl (for legacy hosts).
                             // New hosts check Channel first; legacy hosts read HostAppUrl.
@@ -56,7 +87,7 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
                                 Name = nameof(UpdateRequiredRequest),
                                 Payload = Any.Pack(new UpdateRequiredRequest()
                                 {
-                                    Channel = releaseGroup,
+                                    Channel = chosenChannel,
                                     HostAppUrl = hostAppUrl
                                 })
                             });
