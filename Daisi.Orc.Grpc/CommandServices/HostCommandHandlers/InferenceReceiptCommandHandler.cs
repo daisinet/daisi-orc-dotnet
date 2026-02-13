@@ -1,3 +1,4 @@
+using Daisi.Orc.Core.Data.Db;
 using Daisi.Orc.Core.Services;
 using Daisi.Orc.Grpc.CommandServices.Containers;
 using Daisi.Orc.Grpc.CommandServices.Handlers;
@@ -9,6 +10,7 @@ namespace Daisi.Orc.Grpc.CommandServices.HostCommandHandlers
 {
     public class InferenceReceiptCommandHandler(
         CreditService creditService,
+        Cosmo cosmo,
         ILogger<InferenceReceiptCommandHandler> logger) : OrcCommandHandlerBase
     {
         public override async Task HandleAsync(
@@ -38,7 +40,24 @@ namespace Daisi.Orc.Grpc.CommandServices.HostCommandHandlers
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, $"Error processing InferenceReceipt for host {hostId}");
+                logger.LogError(ex, $"Error processing credits for InferenceReceipt from host {hostId}");
+            }
+
+            // Persist inference message data so the host dashboard can display token stats
+            try
+            {
+                float tokenProcessingSeconds = receipt.ComputeTimeMs / 1000f;
+                await cosmo.RecordInferenceMessageAsync(
+                    hostId,
+                    hostAccountId,
+                    receipt.InferenceId,
+                    receipt.SessionId,
+                    receipt.TokenCount,
+                    tokenProcessingSeconds);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, $"Error recording inference message for host {hostId}");
             }
         }
     }

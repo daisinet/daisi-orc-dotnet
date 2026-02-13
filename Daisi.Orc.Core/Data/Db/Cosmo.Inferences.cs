@@ -24,6 +24,37 @@ namespace Daisi.Orc.Core.Data.Db
             return item.Resource;
         }
 
+        public async Task RecordInferenceMessageAsync(string hostId, string hostAccountId, string inferenceId, string sessionId, int tokenCount, float tokenProcessingSeconds)
+        {
+            var container = await GetContainerAsync(InferencesContainerName);
+
+            var inference = new Inference
+            {
+                AccountId = hostAccountId,
+                DateCreated = DateTime.UtcNow,
+                DateLastMessage = DateTime.UtcNow,
+                CreatedSessionId = sessionId,
+                TotalTokenCount = tokenCount,
+                TokenProcessingSeconds = tokenProcessingSeconds,
+                Messages = new List<InferenceMessage>
+                {
+                    new InferenceMessage
+                    {
+                        Id = GenerateId(InferenceIdPrefix),
+                        InferenceId = inferenceId,
+                        SessionId = sessionId,
+                        HostId = hostId,
+                        TokenCount = tokenCount,
+                        TokenProcessingSeconds = tokenProcessingSeconds,
+                        DateCreated = DateTime.UtcNow,
+                        Author = "Assistant"
+                    }
+                }
+            };
+
+            await container.CreateItemAsync(inference, new PartitionKey(hostAccountId));
+        }
+
         public async Task<List<InferenceMessageStat>> GetInferenceMessageStatsForHostAsync(
             string hostId, DateTime? startDate = null)
         {
