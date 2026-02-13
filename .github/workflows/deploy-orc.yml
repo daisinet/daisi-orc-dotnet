@@ -56,5 +56,5 @@ jobs:
           inlineScript: |
             az webapp config appsettings set \
               --name ${{ secrets.AZURE_ORC_WEBAPP_NAME }} \
-              --resource-group ${{ secrets.AZURE_ORC_WEBAPP_NAME }} \
+              --resource-group daisi-prod-rg \
               --settings "Daisi:OrcVersion=${{ inputs.version }}"
