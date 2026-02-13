@@ -67,8 +67,6 @@ namespace Daisi.Orc.Core.Data.Db
             if (startDate.HasValue)
                 queryText += " AND m.DateCreated >= @startDate";
 
-            queryText += " ORDER BY m.DateCreated ASC";
-
             var queryDef = new QueryDefinition(queryText)
                 .WithParameter("@hostId", hostId);
 

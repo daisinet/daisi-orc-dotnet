@@ -25,6 +25,15 @@ isn't leaving the local network, but SSL is still recommended even for private n
 }
 ```
 
+### Inference Receipt Processing
+
+When a host sends an `InferenceReceipt`, the ORC's `InferenceReceiptCommandHandler` processes it in two stages:
+
+1. **Token stats** — The receipt is always persisted via `RecordInferenceMessageAsync` so the host dashboard can display token-processing metrics. This is unconditional — every inference produces stats.
+2. **Credit settlement** — The handler resolves the consumer's client key (`receipt.ConsumerClientKey`) to an account via `Cosmo.GetKeyAsync`. If the resolved consumer account differs from the host's owner account, `CreditService.ProcessInferenceReceiptAsync` awards credits to the host and debits the consumer. If the client key is empty or unresolvable (e.g. internal/bot usage, same-account testing), no credit transaction occurs.
+
+This ensures the dashboard always has data while credits only transfer between distinct accounts.
+
 ### Project - Daisi.Orc.Core
 This is the core library that contains various interfaces and a CosmoDb repository, which is used by default. Abstraction for other databases and repository types is planned, but not yet implemented.
 

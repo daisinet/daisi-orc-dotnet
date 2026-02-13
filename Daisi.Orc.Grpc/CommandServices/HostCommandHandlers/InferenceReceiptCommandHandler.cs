@@ -1,9 +1,9 @@
 using Daisi.Orc.Core.Data.Db;
+using Daisi.Orc.Core.Data.Models;
 using Daisi.Orc.Core.Services;
 using Daisi.Orc.Grpc.CommandServices.Containers;
 using Daisi.Orc.Grpc.CommandServices.Handlers;
 using Daisi.Protos.V1;
-using System.Collections.Concurrent;
 using System.Threading.Channels;
 
 namespace Daisi.Orc.Grpc.CommandServices.HostCommandHandlers
@@ -26,24 +26,9 @@ namespace Daisi.Orc.Grpc.CommandServices.HostCommandHandlers
             }
 
             var receipt = command.Payload.Unpack<InferenceReceipt>();
-
             var hostAccountId = hostOnline.Host.AccountId;
 
-            logger.LogInformation(
-                $"Processing InferenceReceipt from host {hostOnline.Host.Name}: " +
-                $"InferenceId={receipt.InferenceId}, Tokens={receipt.TokenCount}, " +
-                $"Consumer={receipt.ConsumerAccountId}");
-
-            try
-            {
-                await creditService.ProcessInferenceReceiptAsync(receipt, hostAccountId);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, $"Error processing credits for InferenceReceipt from host {hostId}");
-            }
-
-            // Persist inference message data so the host dashboard can display token stats
+            // Always persist token stats so the host dashboard works
             try
             {
                 float tokenProcessingSeconds = receipt.ComputeTimeMs / 1000f;
@@ -58,6 +43,40 @@ namespace Daisi.Orc.Grpc.CommandServices.HostCommandHandlers
             catch (Exception ex)
             {
                 logger.LogError(ex, $"Error recording inference message for host {hostId}");
+            }
+
+            // Resolve consumer account from client key
+            string? consumerAccountId = null;
+            if (!string.IsNullOrEmpty(receipt.ConsumerClientKey))
+            {
+                try
+                {
+                    var key = await cosmo.GetKeyAsync(receipt.ConsumerClientKey, KeyTypes.Client);
+                    consumerAccountId = key?.Owner?.AccountId;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, $"Could not resolve consumer client key for host {hostId}");
+                }
+            }
+
+            // Only process credits when consumer is a different account
+            if (!string.IsNullOrEmpty(consumerAccountId) && consumerAccountId != hostAccountId)
+            {
+                logger.LogInformation(
+                    $"Processing credits for InferenceReceipt from host {hostOnline.Host.Name}: " +
+                    $"InferenceId={receipt.InferenceId}, Tokens={receipt.TokenCount}, " +
+                    $"Consumer={consumerAccountId}");
+
+                try
+                {
+                    receipt.ConsumerAccountId = consumerAccountId;
+                    await creditService.ProcessInferenceReceiptAsync(receipt, hostAccountId);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, $"Error processing credits for InferenceReceipt from host {hostId}");
+                }
             }
         }
     }
