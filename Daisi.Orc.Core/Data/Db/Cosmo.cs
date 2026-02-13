@@ -58,6 +58,9 @@ namespace Daisi.Orc.Core.Data.Db
                     ModelsContainerName => ModelsPartitionKeyName,
                     CreditsContainerName => CreditsPartitionKeyName,
                     ReleasesContainerName => ReleasesPartitionKeyName,
+                    MarketplaceContainerName => MarketplacePartitionKeyName,
+                    PurchasesContainerName => PurchasesPartitionKeyName,
+                    ProvidersContainerName => ProvidersPartitionKeyName,
                     _ => "id"
                 };
                     

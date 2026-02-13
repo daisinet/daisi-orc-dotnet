@@ -1,6 +1,7 @@
 ﻿using Daisi.Orc.Core.Data.Models;
 using Daisi.Protos.V1;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Azure.Cosmos.Linq;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -193,6 +194,51 @@ namespace Daisi.Orc.Core.Data.Db
             var container = await GetContainerAsync(AccountsContainerName);
             var response = await container.PatchItemAsync<Models.User>(user.Id, GetPartitionKey(user), patchOperations);
             return response.Resource;
+        }
+
+        /// <summary>
+        /// Patches the DriveStorageLimits field on an account record.
+        /// </summary>
+        public async Task<Models.Account> PatchAccountStorageLimitsAsync(string accountId, object storageLimits)
+        {
+            List<PatchOperation> patchOperations = new List<PatchOperation>()
+            {
+                PatchOperation.Set("/DriveStorageLimits", storageLimits),
+            };
+
+            var container = await GetContainerAsync(AccountsContainerName);
+            var response = await container.PatchItemAsync<Models.Account>(accountId, GetAccountPartitionKey(accountId), patchOperations);
+            return response.Resource;
+        }
+
+        /// <summary>
+        /// Gets all accounts across all partitions with paging and optional search on Name.
+        /// </summary>
+        public async Task<PagedResult<Models.Account>> GetAllAccountsAsync(PagingInfo paging)
+        {
+            var container = await GetContainerAsync(AccountsContainerName);
+            var query = container.GetItemLinqQueryable<Models.Account>(allowSynchronousQueryExecution: false, requestOptions: new QueryRequestOptions { MaxItemCount = -1 })
+                .Where(a => a.type == "Account");
+
+            if (paging.HasSearchTerm)
+            {
+                query = query.Where(a => a.Name.ToLower().Contains(paging.SearchTerm.ToLower()));
+            }
+
+            var results = await query.OrderBy(a => a.Name).ToPagedResultAsync(paging.PageSize, paging.PageIndex);
+            return results;
+        }
+
+        /// <summary>
+        /// Gets the count of non-archived users for an account.
+        /// </summary>
+        public async Task<int> GetAccountUserCountAsync(string accountId)
+        {
+            var container = await GetContainerAsync(AccountsContainerName);
+            var count = await container.GetItemLinqQueryable<Models.User>()
+                .Where(u => u.AccountId == accountId && u.Status != UserStatus.Archived && u.Type == "User")
+                .CountAsync();
+            return count;
         }
     }
 }

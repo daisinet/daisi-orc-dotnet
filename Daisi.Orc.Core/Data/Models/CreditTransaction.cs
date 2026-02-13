@@ -9,7 +9,10 @@ namespace Daisi.Orc.Core.Data.Models
         UptimeEarning,
         InferenceSpend,
         Purchase,
-        AdminAdjustment
+        AdminAdjustment,
+        MarketplacePurchase,
+        ProviderEarning,
+        SubscriptionRenewal
     }
 
     public class CreditTransaction

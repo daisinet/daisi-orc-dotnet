@@ -134,13 +134,16 @@ namespace Daisi.Orc.Core.Services
             };
             await cosmo.CreateUptimePeriodAsync(uptimePeriod);
 
+            var host = await cosmo.GetHostAsync(accountId, hostId);
+            var hostLabel = host?.Name ?? hostId;
+
             var transaction = new CreditTransaction
             {
                 AccountId = accountId,
                 Type = CreditTransactionType.UptimeEarning,
                 Amount = credits,
                 Balance = account.Balance,
-                Description = $"Earned {credits} credits for {minutes} minutes of uptime on host {hostId}",
+                Description = $"Earned {credits} credits for {minutes} minutes of uptime on {hostLabel}",
                 RelatedEntityId = hostId,
                 Multiplier = effectiveMultiplier
             };
@@ -227,6 +230,87 @@ namespace Daisi.Orc.Core.Services
 
             // Debit the consumer (best-effort; if they don't have balance, still award host)
             await SpendCreditsAsync(receipt.ConsumerAccountId, receipt.TokenCount, receipt.InferenceId);
+        }
+
+        /// <summary>
+        /// Debit credits for a marketplace purchase. Returns the transaction or null if insufficient balance.
+        /// </summary>
+        public async Task<CreditTransaction?> SpendMarketplaceCreditsAsync(string accountId, long amount, string itemId, string itemName)
+        {
+            var account = await cosmo.GetOrCreateCreditAccountAsync(accountId);
+
+            if (account.Balance < amount)
+                return null;
+
+            account.Balance -= amount;
+            account.TotalSpent += amount;
+            await cosmo.UpdateCreditAccountBalanceAsync(account);
+
+            var transaction = new CreditTransaction
+            {
+                AccountId = accountId,
+                Type = CreditTransactionType.MarketplacePurchase,
+                Amount = -amount,
+                Balance = account.Balance,
+                Description = $"Purchased marketplace item: {itemName}",
+                RelatedEntityId = itemId,
+                Multiplier = 1.0
+            };
+
+            return await cosmo.CreateCreditTransactionAsync(transaction);
+        }
+
+        /// <summary>
+        /// Credit a provider account with earnings from a marketplace sale.
+        /// </summary>
+        public async Task<CreditTransaction> EarnProviderCreditsAsync(string providerAccountId, long amount, string itemId)
+        {
+            var account = await cosmo.GetOrCreateCreditAccountAsync(providerAccountId);
+
+            account.Balance += amount;
+            account.TotalEarned += amount;
+            await cosmo.UpdateCreditAccountBalanceAsync(account);
+
+            var transaction = new CreditTransaction
+            {
+                AccountId = providerAccountId,
+                Type = CreditTransactionType.ProviderEarning,
+                Amount = amount,
+                Balance = account.Balance,
+                Description = $"Marketplace provider earning: {amount} credits",
+                RelatedEntityId = itemId,
+                Multiplier = 1.0
+            };
+
+            return await cosmo.CreateCreditTransactionAsync(transaction);
+        }
+
+        /// <summary>
+        /// Debit credits for a subscription renewal. Returns the transaction or null if insufficient balance.
+        /// </summary>
+        public async Task<CreditTransaction?> SpendSubscriptionRenewalCreditsAsync(string accountId, long amount, string itemId, string itemName)
+        {
+            var account = await cosmo.GetOrCreateCreditAccountAsync(accountId);
+
+            if (account.Balance < amount)
+                return null;
+
+            account.Balance -= amount;
+            account.TotalSpent += amount;
+            await cosmo.UpdateCreditAccountBalanceAsync(account);
+
+            var transaction = new CreditTransaction
+            {
+                AccountId = accountId,
+                Type = CreditTransactionType.SubscriptionRenewal,
+                Amount = -amount,
+                Balance = account.Balance,
+                Description = $"Subscription renewal: {itemName}",
+                RelatedEntityId = itemId,
+                Multiplier = 1.0
+            };
+
+            return await cosmo.CreateCreditTransactionAsync(transaction);
         }
 
         private static double GetUptimeBonusMultiplier(UptimeBonusTier tier)

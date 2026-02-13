@@ -111,7 +111,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                                 else if (!string.IsNullOrWhiteSpace(command.SessionId))
                                 {
                                     logger.LogInformation($"INCOMING SESSION COMMAND \"{command.Name}\" from \"{host.Name}\" on SessionID {command.SessionId}");
-                                    await sessionHandler.HandleAsync(host.Id, command, hostOnline.SessionOutgoingQueues[command.SessionId].Writer, context.CancellationToken);
+                                    await sessionHandler.HandleAsync(host.Id, command, hostOnline.OutgoingQueue.Writer, context.CancellationToken);
                                 }
                                 else
                                 {
@@ -136,7 +136,12 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             // Send messages to the Host (blocks asynchronously via ChannelReader)
             await hostOnline.SendOutgoingCommandsAsync(responseStream, context.CancellationToken);
 
-            await HostContainer.UnregisterHostAsync(host.Id, cosmo, Program.App.Configuration);
+            // Only unregister if this connection's hostOnline is still the current one.
+            // If the host reconnected, a new HostOnline was created and we must not remove it.
+            if (HostContainer.HostsOnline.TryGetValue(host.Id, out var currentOnline) && currentOnline == hostOnline)
+            {
+                await HostContainer.UnregisterHostAsync(host.Id, cosmo, Program.App.Configuration);
+            }
 
         }
     }
