@@ -2,6 +2,7 @@
 using Daisi.Protos.V1;
 using Daisi.SDK.Extensions;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Azure.Cosmos.Linq;
 using System;
 using System.Collections.Generic;
 using System.Drawing.Printing;
@@ -117,6 +118,18 @@ namespace Daisi.Orc.Core.Data.Db
             var container = await GetContainerAsync(HostsContainerName);
             var response = await container.PatchItemAsync<Dapp>(dapp.Id, GetPartitionKey(dapp), patchOperations);
             return response.Resource;
+        }
+
+        /// <summary>
+        /// Gets the count of apps for an account.
+        /// </summary>
+        public async Task<int> GetDappCountAsync(string accountId)
+        {
+            var container = await GetContainerAsync(AppsContainerName);
+            var count = await container.GetItemLinqQueryable<Dapp>()
+                .Where(d => d.AccountId == accountId)
+                .CountAsync();
+            return count;
         }
 
         public async Task<Dapp?> SetDappIsDaisiAppAsync(string appId, bool isDaisiApp)

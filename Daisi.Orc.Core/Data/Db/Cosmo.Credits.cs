@@ -105,6 +105,32 @@ namespace Daisi.Orc.Core.Data.Db
             return results;
         }
 
+        /// <summary>
+        /// Gets all credit transactions for an account (unpaged) for audit purposes.
+        /// Retrieves every transaction to recalculate balance from history.
+        /// </summary>
+        public virtual async Task<List<CreditTransaction>> GetAllCreditTransactionsAsync(string accountId)
+        {
+            var container = await GetContainerAsync(CreditsContainerName);
+            var query = new QueryDefinition("SELECT * FROM c WHERE c.AccountId = @accountId AND IS_DEFINED(c.Amount) AND NOT IS_DEFINED(c.Balance) = false")
+                .WithParameter("@accountId", accountId);
+
+            // Use LINQ for cleaner query - get all transactions (those with Amount field)
+            var linqQuery = container.GetItemLinqQueryable<CreditTransaction>()
+                .Where(t => t.AccountId == accountId && t.Amount != 0)
+                .OrderBy(t => t.DateCreated);
+
+            List<CreditTransaction> results = new();
+            using var iterator = linqQuery.ToFeedIterator();
+            while (iterator.HasMoreResults)
+            {
+                FeedResponse<CreditTransaction> response = await iterator.ReadNextAsync();
+                results.AddRange(response);
+            }
+
+            return results;
+        }
+
         public virtual async Task<UptimePeriod> CreateUptimePeriodAsync(UptimePeriod uptimePeriod)
         {
             var container = await GetContainerAsync(CreditsContainerName);

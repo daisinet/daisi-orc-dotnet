@@ -134,13 +134,16 @@ namespace Daisi.Orc.Core.Services
             };
             await cosmo.CreateUptimePeriodAsync(uptimePeriod);
 
+            var host = await cosmo.GetHostAsync(accountId, hostId);
+            var hostLabel = host?.Name ?? hostId;
+
             var transaction = new CreditTransaction
             {
                 AccountId = accountId,
                 Type = CreditTransactionType.UptimeEarning,
                 Amount = credits,
                 Balance = account.Balance,
-                Description = $"Earned {credits} credits for {minutes} minutes of uptime on host {hostId}",
+                Description = $"Earned {credits} credits for {minutes} minutes of uptime on {hostLabel}",
                 RelatedEntityId = hostId,
                 Multiplier = effectiveMultiplier
             };
