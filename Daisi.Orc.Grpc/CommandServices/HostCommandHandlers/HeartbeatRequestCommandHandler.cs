@@ -35,7 +35,10 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
             hostOnline.Host.Status = HostStatus.Online;
             hostOnline.Host.ConnectedOrc = await orcService.GetHostOrcAsync();
 
-            await cosmo.PatchHostForHeartbeatAsync(hostOnline.Host);
+            var dbHost = await cosmo.PatchHostForHeartbeatAsync(hostOnline.Host);
+
+            // Sync fields that may have changed in the DB (e.g. ReleaseGroup updated via Manager UI)
+            hostOnline.Host.ReleaseGroup = dbHost.ReleaseGroup;
 
             string clientKey = CallContext.GetClientKey()!;
             var key = await cosmo.GetKeyAsync(clientKey, KeyTypes.Client);
