@@ -74,6 +74,18 @@ namespace Daisi.Orc.Core.Data.Db
             var results = await query.OrderBy(host => host.Name).ToPagedResultAsync(pageSize, pageIndex);
             return results;
         }
+        /// <summary>
+        /// Gets the count of non-archived hosts for an account.
+        /// </summary>
+        public async Task<int> GetHostCountAsync(string accountId)
+        {
+            var container = await GetContainerAsync(HostsContainerName);
+            var count = await container.GetItemLinqQueryable<Host>()
+                .Where(h => h.AccountId == accountId && h.Status != Protos.V1.HostStatus.Archived)
+                .CountAsync();
+            return count;
+        }
+
         #endregion
 
         #region Patch Host
