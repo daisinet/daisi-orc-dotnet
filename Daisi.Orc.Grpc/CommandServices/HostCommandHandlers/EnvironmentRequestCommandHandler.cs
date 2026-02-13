@@ -16,7 +16,7 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
 
                 host.Host.OperatingSystem = request.OperatingSystem;
                 host.Host.OperatingSystemVersion = request.OperatingSystemVersion;
-                host.Host.AppVersion = request.AppVersion;
+                host.Host.AppVersion = NormalizeVersion(request.AppVersion);
 
                 await cosmo.PatchHostEnvironmentAsync(host.Host);
 
@@ -110,6 +110,21 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
                 "MacOS" or "MacCatalyst" => "osx-x64",
                 _ => "win-x64"
             };
+        }
+
+        /// <summary>
+        /// Normalizes a version string by parsing and re-serializing it,
+        /// which strips leading zeros (e.g. "2026.02.13.1941" → "2026.2.13.1941").
+        /// </summary>
+        public static string NormalizeVersion(string version)
+        {
+            if (string.IsNullOrWhiteSpace(version))
+                return version;
+
+            if (Version.TryParse(version, out var parsed))
+                return parsed.ToString();
+
+            return version;
         }
     }
 }

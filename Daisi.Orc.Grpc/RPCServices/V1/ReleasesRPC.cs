@@ -1,6 +1,7 @@
 using Daisi.Orc.Core.Data.Db;
 using Daisi.Orc.Core.Data.Models;
 using Daisi.Orc.Core.Services;
+using Daisi.Orc.Grpc.CommandServices.Handlers;
 using Daisi.Protos.V1;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
@@ -16,7 +17,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             var release = new HostRelease
             {
                 ReleaseGroup = request.ReleaseGroup,
-                Version = request.Version,
+                Version = EnvironmentRequestCommandHandler.NormalizeVersion(request.Version),
                 DownloadUrl = request.DownloadUrl,
                 ReleaseNotes = request.ReleaseNotes,
                 RequiredOrcVersion = request.RequiredOrcVersion
@@ -74,7 +75,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
 
         public override async Task<TriggerReleaseResponse> TriggerRelease(TriggerReleaseRequest request, ServerCallContext context)
         {
-            var version = DateTime.UtcNow.ToString("yyyy.MM.dd.HHmm");
+            var version = EnvironmentRequestCommandHandler.NormalizeVersion(DateTime.UtcNow.ToString("yyyy.MM.dd.HHmm"));
 
             logger.LogInformation("TriggerRelease requested: version={Version}, group={Group}, activate={Activate}",
                 version, request.ReleaseGroup, request.Activate);

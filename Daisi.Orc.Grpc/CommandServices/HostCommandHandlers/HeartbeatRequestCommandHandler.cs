@@ -39,6 +39,7 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
 
             // Sync fields that may have changed in the DB (e.g. ReleaseGroup updated via Manager UI)
             hostOnline.Host.ReleaseGroup = dbHost.ReleaseGroup;
+            hostOnline.Host.AppVersion = dbHost.AppVersion;
 
             string clientKey = CallContext.GetClientKey()!;
             var key = await cosmo.GetKeyAsync(clientKey, KeyTypes.Client);
