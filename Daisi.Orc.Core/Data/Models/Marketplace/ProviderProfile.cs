@@ -20,6 +20,7 @@ public class ProviderProfile
     public string DisplayName { get; set; } = string.Empty;
     public string Bio { get; set; } = string.Empty;
     public string AvatarUrl { get; set; } = string.Empty;
+    public string LogoSvg { get; set; } = string.Empty;
     public string WebsiteUrl { get; set; } = string.Empty;
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -33,6 +34,15 @@ public class ProviderProfile
     public long TotalEarnings { get; set; }
     public long PendingPayout { get; set; }
     public int ItemCount { get; set; }
+
+    public bool IsPremium { get; set; }
+    public DateTime? PremiumExpiresAt { get; set; }
+    public string? PremiumTransactionId { get; set; }
+
+    /// <summary>
+    /// Provider's markdown profile content (about, goals, business info).
+    /// </summary>
+    public string ProfileMarkdown { get; set; } = string.Empty;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

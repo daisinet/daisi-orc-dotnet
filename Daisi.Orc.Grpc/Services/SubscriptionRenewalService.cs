@@ -38,5 +38,8 @@ public class SubscriptionRenewalService(IServiceScopeFactory scopeFactory, ILogg
 
         var renewed = await marketplaceService.ProcessSubscriptionRenewalsAsync();
         logger.LogInformation("Processed subscription renewals: {Count} renewed", renewed);
+
+        var premiumRenewed = await marketplaceService.ProcessPremiumRenewalsAsync();
+        logger.LogInformation("Processed premium provider renewals: {Count} renewed", premiumRenewed);
     }
 }

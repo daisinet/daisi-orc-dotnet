@@ -88,6 +88,7 @@ public class MarketplaceItem
     public int PurchaseCount { get; set; }
     public double AverageRating { get; set; }
     public int RatingCount { get; set; }
+    public bool IsFeatured { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
