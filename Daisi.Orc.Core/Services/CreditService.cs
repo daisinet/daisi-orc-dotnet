@@ -17,8 +17,8 @@ namespace Daisi.Orc.Core.Services
         public async Task<CreditTransaction> EarnTokenCreditsAsync(string accountId, int tokenCount, string? relatedEntityId = null)
         {
             var account = await cosmo.GetOrCreateCreditAccountAsync(accountId);
-            var bonusTier = await CalculateUptimeBonusTierAsync(accountId);
-            double uptimeMultiplier = GetUptimeBonusMultiplier(bonusTier);
+            // Use cached bonus tier instead of recalculating (saves a query per call)
+            double uptimeMultiplier = GetUptimeBonusMultiplier(account.CachedBonusTier);
             double effectiveMultiplier = account.TokenEarnMultiplier * uptimeMultiplier;
 
             long credits = (long)(tokenCount * effectiveMultiplier);
@@ -109,7 +109,7 @@ namespace Daisi.Orc.Core.Services
         /// <summary>
         /// Award uptime credits based on minutes online.
         /// </summary>
-        public async Task<CreditTransaction> AwardUptimeCreditsAsync(string accountId, string hostId, int minutes)
+        public async Task<CreditTransaction> AwardUptimeCreditsAsync(string accountId, string hostId, int minutes, string? hostName = null)
         {
             var account = await cosmo.GetOrCreateCreditAccountAsync(accountId);
             double effectiveMultiplier = account.UptimeEarnMultiplier;
@@ -122,6 +122,10 @@ namespace Daisi.Orc.Core.Services
             account.TotalEarned += credits;
             await cosmo.UpdateCreditAccountBalanceAsync(account);
 
+            // Recalculate and cache the bonus tier (this runs hourly, so the cost is acceptable)
+            var bonusTier = await CalculateUptimeBonusTierAsync(accountId, hostId);
+            await cosmo.PatchCreditAccountBonusTierAsync(account.Id, accountId, bonusTier);
+
             var uptimePeriod = new UptimePeriod
             {
                 AccountId = accountId,
@@ -130,12 +134,12 @@ namespace Daisi.Orc.Core.Services
                 DateEnded = DateTime.UtcNow,
                 TotalMinutes = minutes,
                 CreditsPaid = credits,
-                BonusTier = await CalculateUptimeBonusTierAsync(accountId, hostId)
+                BonusTier = bonusTier
             };
             await cosmo.CreateUptimePeriodAsync(uptimePeriod);
 
-            var host = await cosmo.GetHostAsync(accountId, hostId);
-            var hostLabel = host?.Name ?? hostId;
+            // Use passed-in host name to avoid an extra DB read
+            var hostLabel = hostName ?? hostId;
 
             var transaction = new CreditTransaction
             {

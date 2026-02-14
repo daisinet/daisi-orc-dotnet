@@ -364,6 +364,12 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
         public Core.Data.Models.Host Host { get; set; }
 
         /// <summary>
+        /// Cached client key ID set at connection time, used to extend TTL on heartbeats
+        /// without re-querying the key document.
+        /// </summary>
+        public string? ClientKeyId { get; set; }
+
+        /// <summary>
         /// Key is the ID for the session that will receive these outgoing commands.
         /// These going to consumers in a session.
         /// </summary>

@@ -31,6 +31,7 @@ namespace Daisi.Orc.Core.Data.Models
         public HostOrc? ConnectedOrc { get; set;  }
         public string UpdateOperation { get; set;  }
         public string? ReleaseGroup { get; set; }
+        public string? SecretKeyId { get; set; }
     }
   
     public class HostOrc

@@ -80,7 +80,7 @@ namespace Daisi.Orc.Grpc.Background
                     if (minutes <= 0)
                         continue;
 
-                    await creditService.AwardUptimeCreditsAsync(accountId, hostId, minutes);
+                    await creditService.AwardUptimeCreditsAsync(accountId, hostId, minutes, hostOnline.Host.Name);
                     LastAwardTime[hostId] = now;
 
                     logger.LogInformation(

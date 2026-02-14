@@ -5,8 +5,10 @@ namespace Daisi.Orc.Core.Data.Models
 {
     public class CreditAccount
     {
+        public const string IdPrefix = "creditaccount";
+
         [JsonPropertyName("id")]
-        public string Id { get; set; } = Cosmo.GenerateId(Cosmo.CreditAccountIdPrefix);
+        public string Id { get; set; }
 
         public string AccountId { get; set; }
 
@@ -40,8 +42,20 @@ namespace Daisi.Orc.Core.Data.Models
         /// </summary>
         public double UptimeEarnMultiplier { get; set; } = 1.0;
 
+        /// <summary>
+        /// Cached uptime bonus tier, recalculated hourly by UptimeCreditService.
+        /// </summary>
+        public UptimeBonusTier CachedBonusTier { get; set; } = UptimeBonusTier.None;
+
+        /// <summary>
+        /// When the bonus tier was last recalculated.
+        /// </summary>
+        public DateTime? BonusTierCalculatedAt { get; set; }
+
         public DateTime DateCreated { get; set; } = DateTime.UtcNow;
 
         public DateTime DateLastUpdated { get; set; } = DateTime.UtcNow;
+
+        public static string GetDeterministicId(string accountId) => $"{IdPrefix}-{accountId}";
     }
 }

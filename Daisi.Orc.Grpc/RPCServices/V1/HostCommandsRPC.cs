@@ -83,6 +83,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
 
             var host = await HostContainer.RegisterHostAsync(key.Owner.Id, cosmo, context, Program.App.Configuration);
             HostContainer.HostsOnline.TryGetValue(host.Id, out var hostOnline);
+            hostOnline.ClientKeyId = key.Id;
 
             var sessionHandler = serviceProvider.GetService<SessionIncomingQueueHandler>()!;
             sessionHandler.CallContext = context;

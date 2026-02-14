@@ -67,11 +67,15 @@ namespace Daisi.Orc.Core.Data.Db
             return results;
         }
 
-        public async Task<Dapp> CreateDappAsync(Dapp dapp)
+        public async Task<Dapp> CreateDappAsync(Dapp dapp, string? accountName = null)
         {
             var container = await GetContainerAsync(AppsContainerName);
-            var account = await GetAccountAsync(dapp.AccountId);
-            dapp.AccountName = account.Name;
+            if (string.IsNullOrEmpty(accountName))
+            {
+                var account = await GetAccountAsync(dapp.AccountId);
+                accountName = account.Name;
+            }
+            dapp.AccountName = accountName;
             dapp.Id = $"app-{DateTime.UtcNow.ToString("yyMMddhhmmss")}-{StringExtensions.Random(5, false, true).ToLower()}";
 
             var key = await CreateSecretKeyAsync(new AccessKeyOwner()
@@ -115,7 +119,7 @@ namespace Daisi.Orc.Core.Data.Db
             };
 
 
-            var container = await GetContainerAsync(HostsContainerName);
+            var container = await GetContainerAsync(AppsContainerName);
             var response = await container.PatchItemAsync<Dapp>(dapp.Id, GetPartitionKey(dapp), patchOperations);
             return response.Resource;
         }

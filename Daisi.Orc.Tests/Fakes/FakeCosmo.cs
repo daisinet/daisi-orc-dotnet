@@ -26,7 +26,7 @@ namespace Daisi.Orc.Tests.Fakes
         {
             var account = CreditAccounts.GetOrAdd(accountId, _ => new CreditAccount
             {
-                Id = GenerateId(CreditAccountIdPrefix),
+                Id = CreditAccount.GetDeterministicId(accountId),
                 AccountId = accountId,
                 Balance = 0,
                 TotalEarned = 0,
@@ -50,12 +50,22 @@ namespace Daisi.Orc.Tests.Fakes
             return Task.FromResult(creditAccount);
         }
 
+        public override Task PatchCreditAccountBonusTierAsync(string creditAccountId, string accountId, UptimeBonusTier tier)
+        {
+            if (CreditAccounts.TryGetValue(accountId, out var account))
+            {
+                account.CachedBonusTier = tier;
+                account.BonusTierCalculatedAt = DateTime.UtcNow;
+            }
+            return Task.CompletedTask;
+        }
+
         public override Task<CreditAccount> PatchCreditAccountMultipliersAsync(
             string accountId, double? tokenMultiplier, double? uptimeMultiplier)
         {
             var account = CreditAccounts.GetOrAdd(accountId, _ => new CreditAccount
             {
-                Id = GenerateId(CreditAccountIdPrefix),
+                Id = CreditAccount.GetDeterministicId(accountId),
                 AccountId = accountId
             });
 
@@ -121,18 +131,20 @@ namespace Daisi.Orc.Tests.Fakes
         /// Seed a credit account with a specific balance for testing.
         /// </summary>
         public CreditAccount SeedAccount(string accountId, long balance = 0,
-            double tokenMultiplier = 1.0, double uptimeMultiplier = 1.0)
+            double tokenMultiplier = 1.0, double uptimeMultiplier = 1.0,
+            UptimeBonusTier cachedBonusTier = UptimeBonusTier.None)
         {
             var account = new CreditAccount
             {
-                Id = GenerateId(CreditAccountIdPrefix),
+                Id = CreditAccount.GetDeterministicId(accountId),
                 AccountId = accountId,
                 Balance = balance,
                 TotalEarned = 0,
                 TotalSpent = 0,
                 TotalPurchased = 0,
                 TokenEarnMultiplier = tokenMultiplier,
-                UptimeEarnMultiplier = uptimeMultiplier
+                UptimeEarnMultiplier = uptimeMultiplier,
+                CachedBonusTier = cachedBonusTier
             };
 
             CreditAccounts[accountId] = account;
