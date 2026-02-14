@@ -109,7 +109,7 @@ public partial class Program
                     Enabled = true,
                     LoadAtStartup = false,
                     HasReasoning = false,
-                    LLama = new DaisiModelLLamaSettings
+                    Backend = new DaisiModelBackendSettings
                     {
                         Runtime = 0,
                         ContextSize = 8192,
@@ -129,7 +129,7 @@ public partial class Program
                     Enabled = true,
                     LoadAtStartup = false,
                     HasReasoning = false,
-                    LLama = new DaisiModelLLamaSettings
+                    Backend = new DaisiModelBackendSettings
                     {
                         Runtime = 0,
                         ContextSize = 8192,

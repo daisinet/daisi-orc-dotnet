@@ -96,19 +96,19 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                     proto.ThinkLevels.Add((ThinkLevels)level);
                 }
 
-                if (model.LLama != null)
+                if (model.Backend != null)
                 {
-                    proto.LLama = new LLamaSettings
+                    proto.Backend = new BackendSettings
                     {
-                        Runtime = (LLamaRuntimes)model.LLama.Runtime,
-                        ContextSize = model.LLama.ContextSize,
-                        GpuLayerCount = model.LLama.GpuLayerCount,
-                        BatchSize = model.LLama.BatchSize,
-                        ShowLogs = model.LLama.ShowLogs,
-                        AutoFallback = model.LLama.AutoFallback,
-                        SkipCheck = model.LLama.SkipCheck,
-                        LlamaPath = model.LLama.LlamaPath ?? string.Empty,
-                        LlavaPath = model.LLama.LlavaPath ?? string.Empty
+                        Runtime = (BackendRuntimes)model.Backend.Runtime,
+                        ContextSize = model.Backend.ContextSize,
+                        GpuLayerCount = model.Backend.GpuLayerCount,
+                        BatchSize = model.Backend.BatchSize,
+                        ShowLogs = model.Backend.ShowLogs,
+                        AutoFallback = model.Backend.AutoFallback,
+                        SkipCheck = model.Backend.SkipCheck,
+                        LlamaPath = model.Backend.LlamaPath ?? string.Empty,
+                        LlavaPath = model.Backend.LlavaPath ?? string.Empty
                     };
                 }
 
@@ -134,19 +134,19 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                     ThinkLevels = proto.ThinkLevels.Select(t => (int)t).ToList()
                 };
 
-                if (proto.LLama != null)
+                if (proto.Backend != null)
                 {
-                    model.LLama = new DaisiModelLLamaSettings
+                    model.Backend = new DaisiModelBackendSettings
                     {
-                        Runtime = (int)proto.LLama.Runtime,
-                        ContextSize = proto.LLama.ContextSize,
-                        GpuLayerCount = proto.LLama.GpuLayerCount,
-                        BatchSize = proto.LLama.BatchSize,
-                        ShowLogs = proto.LLama.ShowLogs,
-                        AutoFallback = proto.LLama.AutoFallback,
-                        SkipCheck = proto.LLama.SkipCheck,
-                        LlamaPath = proto.LLama.LlamaPath,
-                        LlavaPath = proto.LLama.LlavaPath
+                        Runtime = (int)proto.Backend.Runtime,
+                        ContextSize = proto.Backend.ContextSize,
+                        GpuLayerCount = proto.Backend.GpuLayerCount,
+                        BatchSize = proto.Backend.BatchSize,
+                        ShowLogs = proto.Backend.ShowLogs,
+                        AutoFallback = proto.Backend.AutoFallback,
+                        SkipCheck = proto.Backend.SkipCheck,
+                        LlamaPath = proto.Backend.LlamaPath,
+                        LlavaPath = proto.Backend.LlavaPath
                     };
                 }
 
