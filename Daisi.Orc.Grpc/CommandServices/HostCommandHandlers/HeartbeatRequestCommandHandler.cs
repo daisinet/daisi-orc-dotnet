@@ -41,9 +41,20 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
             hostOnline.Host.ReleaseGroup = dbHost.ReleaseGroup;
             hostOnline.Host.AppVersion = dbHost.AppVersion;
 
-            string clientKey = CallContext.GetClientKey()!;
-            var key = await cosmo.GetKeyAsync(clientKey, KeyTypes.Client);
-            await cosmo.SetKeyTTLAsync(key, 30);
+            // Use cached client key ID from HostOnline to extend TTL with a single patch
+            // instead of GetKeyAsync + full document upsert (saves 1 read + reduces write cost)
+            if (!string.IsNullOrEmpty(hostOnline.ClientKeyId))
+            {
+                await cosmo.PatchKeyExpirationAsync(hostOnline.ClientKeyId, DateTime.UtcNow.AddMinutes(30));
+            }
+            else
+            {
+                // Fallback for connections established before ClientKeyId was cached
+                string clientKey = CallContext.GetClientKey()!;
+                var key = await cosmo.GetKeyAsync(clientKey, KeyTypes.Client);
+                await cosmo.SetKeyTTLAsync(key, 30);
+                hostOnline.ClientKeyId = key.Id;
+            }
 
             responseQueue.TryWrite(new Command()
             {

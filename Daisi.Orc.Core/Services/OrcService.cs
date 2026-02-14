@@ -11,8 +11,7 @@ namespace Daisi.Orc.Core.Services
 {
     public class OrcService(IConfiguration configuration, Cosmo cosmo)
     {
-
-
+        private static HostOrc? _cachedHostOrc;
 
         public string? AccountId => configuration[$"Daisi:{nameof(AccountId)}"];
         public string? MinimumHostVersion => configuration[$"Daisi:{nameof(MinimumHostVersion)}"];
@@ -33,16 +32,20 @@ namespace Daisi.Orc.Core.Services
 
         public async Task<HostOrc> GetHostOrcAsync()
         {
+            if (_cachedHostOrc is not null)
+                return _cachedHostOrc;
+
             var orc = (await cosmo.GetOrcsAsync(null, OrcId, AccountId)).Items.FirstOrDefault();
             if (orc == null) return null;
 
-            return new HostOrc()
+            _cachedHostOrc = new HostOrc()
             {
                 Domain = orc.Domain,
                 Id = orc.Id,
                 Name = orc.Name,
                 Port = orc.Port,
             };
+            return _cachedHostOrc;
         }
     }
 }

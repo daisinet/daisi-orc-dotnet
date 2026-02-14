@@ -95,15 +95,12 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
 
             if (response.key is not null && response.response.IsValid && response.key.Owner.SystemRole == SystemRoles.User)
             {
-                var user = await cosmo.GetUserAsync(response.key.Owner.Id, response.key.Owner.AccountId);
-                if (user is not null)
-                {
-                    response.response.UserId = user.Id;
-                    response.response.UserName = user.Name;
-                    response.response.UserRole = user.Role;
-                    response.response.UserAccountId = user.AccountId;
-                    logger.LogInformation($"ValidateClientKey: User={user.Name}, Role={user.Role} ({(int)user.Role})");
-                }
+                var owner = response.key.Owner;
+                response.response.UserId = owner.Id;
+                response.response.UserName = owner.Name;
+                response.response.UserRole = owner.Role ?? UserRoles.Reader;
+                response.response.UserAccountId = owner.AccountId;
+                logger.LogInformation($"ValidateClientKey: User={owner.Name}, Role={owner.Role} ({(int)(owner.Role ?? UserRoles.Reader)})");
             }
 
             return response.response;
@@ -227,7 +224,9 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                         Id = user.Id,
                         Name = user.Name,
                         AccountId = user.AccountId,
-                        SystemRole = SystemRoles.User
+                        SystemRole = SystemRoles.User,
+                        AllowedToLogin = user.AllowedToLogin,
+                        Role = user.Role
                     });
 
                 if (appClientKey is null)
@@ -269,7 +268,9 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                                                 Id = user.Id,
                                                 Name = user.Name,
                                                 AccountId = user.AccountId,
-                                                SystemRole = SystemRoles.User
+                                                SystemRole = SystemRoles.User,
+                                                AllowedToLogin = user.AllowedToLogin,
+                                                Role = user.Role
                                             },
                                             new() { secretKey.Owner.Id });
 

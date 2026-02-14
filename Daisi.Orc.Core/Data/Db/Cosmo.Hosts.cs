@@ -195,7 +195,16 @@ namespace Daisi.Orc.Core.Data.Db
             var response = await container.PatchItemAsync<Host>(hostId, new PartitionKey(accountId), patchOperations);
         }
 
-      
+        public async Task PatchHostSecretKeyIdAsync(string hostId, string accountId, string secretKeyId)
+        {
+            List<PatchOperation> patchOperations = new List<PatchOperation>()
+            {
+                PatchOperation.Set("/SecretKeyId", secretKeyId)
+            };
+
+            var container = await GetContainerAsync(HostsContainerName);
+            await container.PatchItemAsync<Host>(hostId, new PartitionKey(accountId), patchOperations);
+        }
 
         #endregion
 

@@ -12,31 +12,35 @@ namespace Daisi.Orc.Tests.Models
         {
             var account = new CreditAccount();
 
-            Assert.True(account.Id.StartsWith(Cosmo.CreditAccountIdPrefix));
+            // Id is now set explicitly via GetDeterministicId, not auto-generated
+            Assert.Null(account.Id);
             Assert.Equal(0, account.Balance);
             Assert.Equal(0, account.TotalEarned);
             Assert.Equal(0, account.TotalSpent);
             Assert.Equal(0, account.TotalPurchased);
             Assert.Equal(1.0, account.TokenEarnMultiplier);
             Assert.Equal(1.0, account.UptimeEarnMultiplier);
+            Assert.Equal(UptimeBonusTier.None, account.CachedBonusTier);
+            Assert.Null(account.BonusTierCalculatedAt);
             Assert.True(account.DateCreated <= DateTime.UtcNow);
             Assert.True(account.DateLastUpdated <= DateTime.UtcNow);
         }
 
         [Fact]
-        public void CreditAccount_IdGeneration_IsUnique()
+        public void CreditAccount_DeterministicId_IsDeterministic()
         {
-            var account1 = new CreditAccount();
-            var account2 = new CreditAccount();
+            var id1 = CreditAccount.GetDeterministicId("acct-123");
+            var id2 = CreditAccount.GetDeterministicId("acct-123");
 
-            Assert.NotEqual(account1.Id, account2.Id);
+            Assert.Equal(id1, id2);
         }
 
         [Fact]
-        public void CreditAccount_IdGeneration_HasCorrectPrefix()
+        public void CreditAccount_DeterministicId_HasCorrectPrefix()
         {
-            var account = new CreditAccount();
-            Assert.StartsWith("cred-", account.Id);
+            var id = CreditAccount.GetDeterministicId("acct-123");
+            Assert.StartsWith(CreditAccount.IdPrefix, id);
+            Assert.Equal("creditaccount-acct-123", id);
         }
 
         #endregion
@@ -71,7 +75,10 @@ namespace Daisi.Orc.Tests.Models
             Assert.Contains(CreditTransactionType.InferenceSpend, values);
             Assert.Contains(CreditTransactionType.Purchase, values);
             Assert.Contains(CreditTransactionType.AdminAdjustment, values);
-            Assert.Equal(5, values.Length);
+            Assert.Contains(CreditTransactionType.MarketplacePurchase, values);
+            Assert.Contains(CreditTransactionType.ProviderEarning, values);
+            Assert.Contains(CreditTransactionType.SubscriptionRenewal, values);
+            Assert.Equal(8, values.Length);
         }
 
         #endregion

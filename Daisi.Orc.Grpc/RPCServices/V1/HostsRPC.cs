@@ -47,6 +47,14 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
 
             if (host == null) throw new Exception("DAISI: Invalid host.");
 
+            // Use stored SecretKeyId for a point read instead of cross-partition query
+            if (!string.IsNullOrEmpty(host.SecretKeyId))
+            {
+                var key = await cosmo.GetKeyAsync(host.SecretKeyId, KeyTypes.Secret);
+                if (key != null) return new GetSecretKeyResponse() { SecretKey = key.Key };
+            }
+
+            // Fallback for hosts registered before SecretKeyId was stored
             var keys = await cosmo.GetKeysByOwnerIdAsync(request.HostId);
             var secretKey = keys.FirstOrDefault(k => k.Type == KeyTypes.Secret.Name);
 
@@ -239,6 +247,10 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 Name = request.Host.Name,
                 SystemRole = SystemRoles.HostDevice
             });
+
+            // Store the secret key ID on the host for efficient lookups
+            host.SecretKeyId = secretKey.Id;
+            await cosmo.PatchHostSecretKeyIdAsync(host.Id, host.AccountId, secretKey.Id);
 
             response.SecretKey = secretKey.Key;
             response.HostId = host.Id;

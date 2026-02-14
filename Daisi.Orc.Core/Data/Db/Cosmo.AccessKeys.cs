@@ -210,6 +210,27 @@ namespace Daisi.Orc.Core.Data.Db
             var container = await GetContainerAsync(AccessKeyContainerName);
             await container.PatchItemAsync<AccessKey>(key.EntityId, new PartitionKey(key.PartitionKeyValue), patchOperations);
         }
+
+        public async Task PatchKeyOwnerUserFieldsAsync(PartitionKeyStub key, bool allowedToLogin, Protos.V1.UserRoles role)
+        {
+            List<PatchOperation> patchOperations = new List<PatchOperation>()
+            {
+                PatchOperation.Set("/Owner/AllowedToLogin", allowedToLogin),
+                PatchOperation.Set("/Owner/Role", role)
+            };
+            var container = await GetContainerAsync(AccessKeyContainerName);
+            await container.PatchItemAsync<AccessKey>(key.EntityId, new PartitionKey(key.PartitionKeyValue), patchOperations);
+        }
+
+        public async Task PatchKeyExpirationAsync(string keyId, DateTime newExpiration)
+        {
+            List<PatchOperation> patchOperations = new List<PatchOperation>()
+            {
+                PatchOperation.Set("/DateExpires", newExpiration)
+            };
+            var container = await GetContainerAsync(AccessKeyContainerName);
+            await container.PatchItemAsync<AccessKey>(keyId, new PartitionKey(KeyTypes.Client.Name), patchOperations);
+        }
         public async Task<IEnumerable<AccessKey>> GetKeysByOwnerIdAsync(string ownerId)
         {
             var container = await GetContainerAsync(AccessKeyContainerName);
