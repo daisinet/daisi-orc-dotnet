@@ -58,6 +58,8 @@ namespace Daisi.Orc.Core.Data.Db
                     ModelsContainerName => ModelsPartitionKeyName,
                     CreditsContainerName => CreditsPartitionKeyName,
                     ReleasesContainerName => ReleasesPartitionKeyName,
+                    BotReleasesContainerName => BotReleasesPartitionKeyName,
+                    BotInstallsContainerName => BotInstallsPartitionKeyName,
                     MarketplaceContainerName => MarketplacePartitionKeyName,
                     PurchasesContainerName => PurchasesPartitionKeyName,
                     ProvidersContainerName => ProvidersPartitionKeyName,

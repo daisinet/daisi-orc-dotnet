@@ -247,6 +247,8 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 if (appClientKey.DateExpires.HasValue)
                     response.KeyExpiration = Timestamp.FromDateTime(appClientKey.DateExpires.Value);
 
+                TrackBotInstall(request, user);
+
                 return response;
 
             }
@@ -282,6 +284,8 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 if (clientKey.DateExpires.HasValue)
                     response.KeyExpiration = Timestamp.FromDateTime(clientKey.DateExpires.Value);
 
+                TrackBotInstall(request, user);
+
                 response.Success = true;
                 return response;
             }
@@ -291,9 +295,31 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             response.ErrorMessage = "Unknown error occurred while validating auth code.";
             response.Success = false;
             return response;
+        }
 
+        private void TrackBotInstall(ValidateAuthCodeRequest request, Core.Data.Models.User user)
+        {
+            if (string.IsNullOrWhiteSpace(request.BotVersion))
+                return;
 
-
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await cosmo.CreateOrUpdateBotInstallAsync(new Core.Data.Models.BotInstall
+                    {
+                        UserId = user.Id,
+                        UserName = user.Name,
+                        AccountId = user.AccountId,
+                        Version = request.BotVersion,
+                        Platform = request.BotPlatform ?? "unknown"
+                    });
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to track bot install for user {UserId}", user.Id);
+                }
+            });
         }
     }
 }

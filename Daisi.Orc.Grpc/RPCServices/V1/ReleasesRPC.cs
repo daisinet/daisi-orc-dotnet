@@ -117,6 +117,42 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             }
         }
 
+        public override async Task<GetBotReleasesResponse> GetBotReleases(GetBotReleasesRequest request, ServerCallContext context)
+        {
+            var releases = await cosmo.GetBotReleasesAsync(request.ReleaseGroup);
+
+            var response = new GetBotReleasesResponse();
+            foreach (var release in releases)
+            {
+                var installCount = await cosmo.GetBotInstallCountByVersionAsync(release.Version);
+                response.Releases.Add(MapToBotProto(release, installCount));
+            }
+
+            return response;
+        }
+
+        public override async Task<GetActiveBotReleaseResponse> GetActiveBotRelease(GetActiveBotReleaseRequest request, ServerCallContext context)
+        {
+            var release = await cosmo.GetActiveBotReleaseAsync(request.ReleaseGroup);
+
+            return new GetActiveBotReleaseResponse
+            {
+                Release = release != null ? MapToBotProto(release, 0) : null
+            };
+        }
+
+        public override async Task<ActivateBotReleaseResponse> ActivateBotRelease(ActivateBotReleaseRequest request, ServerCallContext context)
+        {
+            var release = await cosmo.ActivateBotReleaseAsync(request.ReleaseId, request.ReleaseGroup);
+
+            logger.LogInformation("Activated bot release {ReleaseId} for group {Group}", release.Id, release.ReleaseGroup);
+
+            return new ActivateBotReleaseResponse
+            {
+                Release = MapToBotProto(release, 0)
+            };
+        }
+
         private static HostReleaseInfo MapToProto(HostRelease release)
         {
             return new HostReleaseInfo
@@ -130,6 +166,23 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 RequiredOrcVersion = release.RequiredOrcVersion,
                 CreatedBy = release.CreatedBy,
                 DateCreated = Timestamp.FromDateTime(DateTime.SpecifyKind(release.DateCreated, DateTimeKind.Utc))
+            };
+        }
+
+        private static BotReleaseInfo MapToBotProto(BotRelease release, int installCount)
+        {
+            return new BotReleaseInfo
+            {
+                Id = release.Id,
+                ReleaseGroup = release.ReleaseGroup,
+                Version = release.Version,
+                TuiDownloadUrl = release.TuiDownloadUrl,
+                MauiDownloadUrl = release.MauiDownloadUrl,
+                IsActive = release.IsActive,
+                ReleaseNotes = release.ReleaseNotes,
+                CreatedBy = release.CreatedBy,
+                DateCreated = Timestamp.FromDateTime(DateTime.SpecifyKind(release.DateCreated, DateTimeKind.Utc)),
+                InstallCount = installCount
             };
         }
     }
