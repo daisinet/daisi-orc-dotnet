@@ -93,4 +93,57 @@ public partial class Cosmo
         }
         return profiles;
     }
+
+    public async Task<List<ProviderProfile>> GetPremiumProvidersAsync()
+    {
+        var container = await GetContainerAsync(ProvidersContainerName);
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.type = 'ProviderProfile' AND c.Status = 'Approved' AND c.IsPremium = true ORDER BY c.DisplayName");
+
+        var profiles = new List<ProviderProfile>();
+        using var resultSet = container.GetItemQueryIterator<ProviderProfile>(query);
+        while (resultSet.HasMoreResults)
+        {
+            var response = await resultSet.ReadNextAsync();
+            profiles.AddRange(response);
+        }
+        return profiles;
+    }
+
+    public async Task<List<ProviderProfile>> GetExpiringPremiumProvidersAsync(DateTime expiresBy)
+    {
+        var container = await GetContainerAsync(ProvidersContainerName);
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.IsPremium = true AND c.PremiumExpiresAt <= @expiresBy")
+            .WithParameter("@expiresBy", expiresBy);
+
+        var profiles = new List<ProviderProfile>();
+        using var resultSet = container.GetItemQueryIterator<ProviderProfile>(query);
+        while (resultSet.HasMoreResults)
+        {
+            var response = await resultSet.ReadNextAsync();
+            profiles.AddRange(response);
+        }
+        return profiles;
+    }
+
+    public async Task<MarketplaceSettings> GetMarketplaceSettingsAsync()
+    {
+        var container = await GetContainerAsync(ProvidersContainerName);
+        try
+        {
+            var response = await container.ReadItemAsync<MarketplaceSettings>("marketplace-settings", new PartitionKey("system"));
+            return response.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            var settings = new MarketplaceSettings();
+            var response = await container.CreateItemAsync(settings, new PartitionKey("system"));
+            return response.Resource;
+        }
+    }
+
+    public async Task UpdateMarketplaceSettingsAsync(MarketplaceSettings settings)
+    {
+        var container = await GetContainerAsync(ProvidersContainerName);
+        await container.UpsertItemAsync(settings, new PartitionKey("system"));
+    }
 }

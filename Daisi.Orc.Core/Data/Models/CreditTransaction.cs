@@ -12,7 +12,9 @@ namespace Daisi.Orc.Core.Data.Models
         AdminAdjustment,
         MarketplacePurchase,
         ProviderEarning,
-        SubscriptionRenewal
+        SubscriptionRenewal,
+        PremiumSubscription,
+        PremiumRefund
     }
 
     public class CreditTransaction

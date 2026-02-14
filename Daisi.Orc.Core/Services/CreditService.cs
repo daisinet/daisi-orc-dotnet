@@ -313,6 +313,56 @@ namespace Daisi.Orc.Core.Services
             return await cosmo.CreateCreditTransactionAsync(transaction);
         }
 
+        /// <summary>
+        /// Debit credits for a premium provider subscription. Returns the transaction or null if insufficient balance.
+        /// </summary>
+        public async Task<CreditTransaction?> SpendPremiumCreditsAsync(string accountId, long amount)
+        {
+            var account = await cosmo.GetOrCreateCreditAccountAsync(accountId);
+
+            if (account.Balance < amount)
+                return null;
+
+            account.Balance -= amount;
+            account.TotalSpent += amount;
+            await cosmo.UpdateCreditAccountBalanceAsync(account);
+
+            var transaction = new CreditTransaction
+            {
+                AccountId = accountId,
+                Type = CreditTransactionType.PremiumSubscription,
+                Amount = -amount,
+                Balance = account.Balance,
+                Description = "Premium provider subscription",
+                Multiplier = 1.0
+            };
+
+            return await cosmo.CreateCreditTransactionAsync(transaction);
+        }
+
+        /// <summary>
+        /// Refund prorated premium credits when a provider cancels.
+        /// </summary>
+        public async Task<CreditTransaction> RefundPremiumCreditsAsync(string accountId, long amount)
+        {
+            var account = await cosmo.GetOrCreateCreditAccountAsync(accountId);
+
+            account.Balance += amount;
+            await cosmo.UpdateCreditAccountBalanceAsync(account);
+
+            var transaction = new CreditTransaction
+            {
+                AccountId = accountId,
+                Type = CreditTransactionType.PremiumRefund,
+                Amount = amount,
+                Balance = account.Balance,
+                Description = $"Premium cancellation refund ({amount} credits)",
+                Multiplier = 1.0
+            };
+
+            return await cosmo.CreateCreditTransactionAsync(transaction);
+        }
+
         private static double GetUptimeBonusMultiplier(UptimeBonusTier tier)
         {
             return tier switch

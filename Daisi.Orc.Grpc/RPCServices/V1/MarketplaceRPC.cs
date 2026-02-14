@@ -59,6 +59,14 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
 
     public override async Task<CreateMarketplaceItemResponse> CreateMarketplaceItem(CreateMarketplaceItemRequest request, ServerCallContext context)
     {
+        // Enforce premium requirement for paid items
+        if (request.Item.PricingModel != MarketplacePricingModel.MarketplacePricingFree)
+        {
+            var provider = await cosmo.GetProviderProfileAsync(request.Item.AccountId);
+            if (provider is null || !provider.IsPremium)
+                throw new RpcException(new Status(StatusCode.FailedPrecondition, "Only Premium providers can set a price on items"));
+        }
+
         var item = MapFromProto(request.Item);
         item = await cosmo.CreateMarketplaceItemAsync(item);
         logger.LogInformation("Created marketplace item {ItemId} for account {AccountId}", item.Id, item.AccountId);
@@ -81,6 +89,14 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
         var existing = await cosmo.GetMarketplaceItemByIdAsync(request.Item.Id);
         if (existing is null)
             throw new RpcException(new Status(StatusCode.NotFound, "Marketplace item not found"));
+
+        // Enforce premium requirement for paid items
+        if (request.Item.PricingModel != MarketplacePricingModel.MarketplacePricingFree)
+        {
+            var provider = await cosmo.GetProviderProfileAsync(existing.AccountId);
+            if (provider is null || !provider.IsPremium)
+                throw new RpcException(new Status(StatusCode.FailedPrecondition, "Only Premium providers can set a price on items"));
+        }
 
         existing.Name = request.Item.Name;
         existing.Description = request.Item.Description;
@@ -246,6 +262,7 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
         existing.Bio = request.Profile.Bio;
         existing.AvatarUrl = request.Profile.AvatarUrl;
         existing.WebsiteUrl = request.Profile.WebsiteUrl;
+        existing.ProfileMarkdown = request.Profile.ProfileMarkdown;
 
         await cosmo.UpdateProviderProfileAsync(existing);
         logger.LogInformation("Updated provider profile for account {AccountId}", existing.AccountId);
@@ -318,6 +335,243 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
         };
     }
 
+    // --- Premium providers ---
+
+    public override async Task<UpgradeToPremiumResponse> UpgradeToPremium(UpgradeToPremiumRequest request, ServerCallContext context)
+    {
+        var (success, error, profile) = await marketplaceService.UpgradeToPremiumAsync(request.AccountId);
+        var response = new UpgradeToPremiumResponse
+        {
+            Success = success,
+            Error = error ?? string.Empty
+        };
+        if (profile is not null)
+            response.Profile = MapProviderToProto(profile);
+        return response;
+    }
+
+    public override async Task<CancelPremiumResponse> CancelPremium(CancelPremiumRequest request, ServerCallContext context)
+    {
+        var (profile, creditsRefunded) = await marketplaceService.CancelPremiumAsync(request.AccountId);
+        var response = new CancelPremiumResponse
+        {
+            Success = profile is not null,
+            CreditsRefunded = creditsRefunded
+        };
+        if (profile is not null)
+            response.Profile = MapProviderToProto(profile);
+        return response;
+    }
+
+    public override async Task<GetPremiumProvidersResponse> GetPremiumProviders(GetPremiumProvidersRequest request, ServerCallContext context)
+    {
+        var providers = await cosmo.GetPremiumProvidersAsync();
+        var response = new GetPremiumProvidersResponse();
+        foreach (var provider in providers)
+        {
+            response.Providers.Add(MapProviderToProto(provider));
+        }
+        return response;
+    }
+
+    public override async Task<SetItemFeaturedResponse> SetItemFeatured(SetItemFeaturedRequest request, ServerCallContext context)
+    {
+        // Extract accountId from the item to identify the provider
+        var item = await cosmo.GetMarketplaceItemByIdAsync(request.MarketplaceItemId);
+        if (item is null)
+            return new SetItemFeaturedResponse { Success = false, Error = "Item not found" };
+
+        var (success, error, updatedItem) = await marketplaceService.SetItemFeaturedAsync(item.AccountId, request.MarketplaceItemId, request.IsFeatured);
+        var response = new SetItemFeaturedResponse
+        {
+            Success = success,
+            Error = error ?? string.Empty
+        };
+        if (updatedItem is not null)
+            response.Item = MapToProto(updatedItem);
+        return response;
+    }
+
+    public override async Task<GetMarketplaceSettingsResponse> GetMarketplaceSettings(GetMarketplaceSettingsRequest request, ServerCallContext context)
+    {
+        var settings = await cosmo.GetMarketplaceSettingsAsync();
+        return new GetMarketplaceSettingsResponse
+        {
+            PremiumMonthlyCreditCost = settings.PremiumMonthlyCreditCost,
+            MaxFeaturedItemsPerProvider = settings.MaxFeaturedItemsPerProvider
+        };
+    }
+
+    public override async Task<UploadProviderLogoResponse> UploadProviderLogo(UploadProviderLogoRequest request, ServerCallContext context)
+    {
+        if (string.IsNullOrWhiteSpace(request.SvgContent))
+            return new UploadProviderLogoResponse { Success = false, Error = "SVG content is required" };
+
+        var svgContent = request.SvgContent.Trim();
+
+        if (!svgContent.Contains("<svg", StringComparison.OrdinalIgnoreCase))
+            return new UploadProviderLogoResponse { Success = false, Error = "Invalid SVG: content must contain an <svg> element" };
+
+        if (svgContent.Length > 102400) // 100KB
+            return new UploadProviderLogoResponse { Success = false, Error = "SVG content exceeds 100KB limit" };
+
+        // Strip everything before the <svg tag (XML declarations, DOCTYPEs, etc.)
+        var svgStart = svgContent.IndexOf("<svg", StringComparison.OrdinalIgnoreCase);
+        if (svgStart > 0)
+            svgContent = svgContent[svgStart..];
+
+        // Sanitize: strip script tags, event handlers, foreignObject, and external references
+        svgContent = Regex.Replace(svgContent, @"<script[^>]*>[\s\S]*?</script>", string.Empty, RegexOptions.IgnoreCase);
+        svgContent = Regex.Replace(svgContent, @"<foreignObject[^>]*>[\s\S]*?</foreignObject>", string.Empty, RegexOptions.IgnoreCase);
+        svgContent = Regex.Replace(svgContent, @"\s+on\w+\s*=\s*""[^""]*""", string.Empty, RegexOptions.IgnoreCase);
+        svgContent = Regex.Replace(svgContent, @"\s+on\w+\s*=\s*'[^']*'", string.Empty, RegexOptions.IgnoreCase);
+        svgContent = Regex.Replace(svgContent, @"href\s*=\s*""javascript:[^""]*""", @"href=""""", RegexOptions.IgnoreCase);
+        svgContent = Regex.Replace(svgContent, @"href\s*=\s*'javascript:[^']*'", @"href=''", RegexOptions.IgnoreCase);
+
+        var profile = await cosmo.GetProviderProfileAsync(request.AccountId);
+        if (profile is null)
+            return new UploadProviderLogoResponse { Success = false, Error = "Provider profile not found" };
+
+        profile.LogoSvg = svgContent;
+        await cosmo.UpdateProviderProfileAsync(profile);
+
+        return new UploadProviderLogoResponse
+        {
+            Success = true,
+            Profile = MapProviderToProto(profile)
+        };
+    }
+
+    // --- Admin provider management ---
+
+    public override async Task<GetAllProvidersResponse> GetAllProviders(GetAllProvidersRequest request, ServerCallContext context)
+    {
+        var providers = await cosmo.GetAllProvidersAsync();
+        var response = new GetAllProvidersResponse();
+        foreach (var provider in providers)
+        {
+            response.Providers.Add(MapProviderToProto(provider));
+        }
+        return response;
+    }
+
+    public override async Task<AdminSetProviderStatusResponse> AdminSetProviderStatus(AdminSetProviderStatusRequest request, ServerCallContext context)
+    {
+        var profile = await cosmo.GetProviderProfileAsync(request.AccountId);
+        if (profile is null)
+            return new AdminSetProviderStatusResponse { Success = false, Error = "Provider not found" };
+
+        if (!System.Enum.TryParse<ProviderStatus>(request.Status, out var status))
+            return new AdminSetProviderStatusResponse { Success = false, Error = "Invalid status" };
+
+        var previousStatus = profile.Status;
+        profile.Status = status;
+
+        // If suspended and was premium, cancel premium
+        if (status == ProviderStatus.Suspended && profile.IsPremium)
+        {
+            profile.IsPremium = false;
+            profile.PremiumExpiresAt = null;
+            await cosmo.ClearFeaturedItemsByAccountAsync(profile.AccountId);
+        }
+
+        await cosmo.UpdateProviderProfileAsync(profile);
+        logger.LogInformation("Admin set provider {AccountId} status from {OldStatus} to {NewStatus}", profile.AccountId, previousStatus, status);
+
+        return new AdminSetProviderStatusResponse
+        {
+            Success = true,
+            Profile = MapProviderToProto(profile)
+        };
+    }
+
+    public override async Task<AdminSetProviderPremiumResponse> AdminSetProviderPremium(AdminSetProviderPremiumRequest request, ServerCallContext context)
+    {
+        var profile = await cosmo.GetProviderProfileAsync(request.AccountId);
+        if (profile is null)
+            return new AdminSetProviderPremiumResponse { Success = false, Error = "Provider not found" };
+
+        if (profile.Status != ProviderStatus.Approved)
+            return new AdminSetProviderPremiumResponse { Success = false, Error = "Provider must be Approved to change premium status" };
+
+        if (request.IsPremium)
+        {
+            profile.IsPremium = true;
+            profile.PremiumExpiresAt = DateTime.UtcNow.AddDays(30);
+        }
+        else
+        {
+            profile.IsPremium = false;
+            profile.PremiumExpiresAt = null;
+            await cosmo.ClearFeaturedItemsByAccountAsync(profile.AccountId);
+        }
+
+        await cosmo.UpdateProviderProfileAsync(profile);
+        logger.LogInformation("Admin set provider {AccountId} premium to {IsPremium}", profile.AccountId, request.IsPremium);
+
+        return new AdminSetProviderPremiumResponse
+        {
+            Success = true,
+            Profile = MapProviderToProto(profile)
+        };
+    }
+
+    public override async Task<AdminSetRevenueShareResponse> AdminSetRevenueShare(AdminSetRevenueShareRequest request, ServerCallContext context)
+    {
+        var profile = await cosmo.GetProviderProfileAsync(request.AccountId);
+        if (profile is null)
+            return new AdminSetRevenueShareResponse { Success = false };
+
+        profile.RevenueSharePercent = Math.Clamp(request.RevenueSharePercent, 0, 100);
+        await cosmo.UpdateProviderProfileAsync(profile);
+        logger.LogInformation("Admin set provider {AccountId} revenue share to {Percent}%", profile.AccountId, profile.RevenueSharePercent);
+
+        return new AdminSetRevenueShareResponse
+        {
+            Success = true,
+            Profile = MapProviderToProto(profile)
+        };
+    }
+
+    public override async Task<AdminUpdateMarketplaceSettingsResponse> AdminUpdateMarketplaceSettings(AdminUpdateMarketplaceSettingsRequest request, ServerCallContext context)
+    {
+        var settings = await cosmo.GetMarketplaceSettingsAsync();
+        settings.PremiumMonthlyCreditCost = request.PremiumMonthlyCreditCost;
+        settings.MaxFeaturedItemsPerProvider = request.MaxFeaturedItemsPerProvider;
+        await cosmo.UpdateMarketplaceSettingsAsync(settings);
+        logger.LogInformation("Admin updated marketplace settings: PremiumCost={Cost}, MaxFeatured={Max}", settings.PremiumMonthlyCreditCost, settings.MaxFeaturedItemsPerProvider);
+
+        return new AdminUpdateMarketplaceSettingsResponse { Success = true };
+    }
+
+    public override async Task<GetProviderItemsResponse> GetProviderItems(GetProviderItemsRequest request, ServerCallContext context)
+    {
+        var items = await cosmo.GetMarketplaceItemsByAccountAsync(request.AccountId);
+        var response = new GetProviderItemsResponse();
+        foreach (var item in items)
+        {
+            response.Items.Add(MapToProto(item));
+        }
+        return response;
+    }
+
+    public override async Task<AdminResetProviderPayoutResponse> AdminResetProviderPayout(AdminResetProviderPayoutRequest request, ServerCallContext context)
+    {
+        var profile = await cosmo.GetProviderProfileAsync(request.AccountId);
+        if (profile is null)
+            return new AdminResetProviderPayoutResponse { Success = false };
+
+        profile.PendingPayout = 0;
+        await cosmo.UpdateProviderProfileAsync(profile);
+        logger.LogInformation("Admin reset pending payout for provider {AccountId}", profile.AccountId);
+
+        return new AdminResetProviderPayoutResponse
+        {
+            Success = true,
+            Profile = MapProviderToProto(profile)
+        };
+    }
+
     // --- Email notifications ---
 
     private async Task NotifyAdminAsync(string subject, string body)
@@ -364,6 +618,7 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
             PurchaseCount = item.PurchaseCount,
             AverageRating = item.AverageRating,
             RatingCount = item.RatingCount,
+            IsFeatured = item.IsFeatured,
             CreatedAt = Timestamp.FromDateTime(DateTime.SpecifyKind(item.CreatedAt, DateTimeKind.Utc)),
             UpdatedAt = Timestamp.FromDateTime(DateTime.SpecifyKind(item.UpdatedAt, DateTimeKind.Utc))
         };
@@ -428,7 +683,7 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
 
     private static ProviderProfileInfo MapProviderToProto(ProviderProfile profile)
     {
-        return new ProviderProfileInfo
+        var info = new ProviderProfileInfo
         {
             Id = profile.Id ?? string.Empty,
             AccountId = profile.AccountId ?? string.Empty,
@@ -441,9 +696,17 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
             TotalEarnings = profile.TotalEarnings,
             PendingPayout = profile.PendingPayout,
             ItemCount = profile.ItemCount,
+            IsPremium = profile.IsPremium,
+            LogoSvg = profile.LogoSvg ?? string.Empty,
+            ProfileMarkdown = profile.ProfileMarkdown ?? string.Empty,
             CreatedAt = Timestamp.FromDateTime(DateTime.SpecifyKind(profile.CreatedAt, DateTimeKind.Utc)),
             UpdatedAt = Timestamp.FromDateTime(DateTime.SpecifyKind(profile.UpdatedAt, DateTimeKind.Utc))
         };
+
+        if (profile.PremiumExpiresAt.HasValue)
+            info.PremiumExpiresAt = Timestamp.FromDateTime(DateTime.SpecifyKind(profile.PremiumExpiresAt.Value, DateTimeKind.Utc));
+
+        return info;
     }
 
 }
