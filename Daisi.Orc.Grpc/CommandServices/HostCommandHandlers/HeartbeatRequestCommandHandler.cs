@@ -28,6 +28,12 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
 
             var request = command.Payload.Unpack<HeartbeatRequest>();
 
+            // Capture loaded model names from heartbeat settings
+            if (request.Settings?.Model?.Models is { Count: > 0 } models)
+            {
+                hostOnline.LoadedModelNames = models.Select(m => m.Name).Where(n => !string.IsNullOrEmpty(n)).ToList();
+            }
+
             hostOnline.Host.DateLastHeartbeat = DateTime.UtcNow;
             var ip = CallContext.GetRemoteIpAddress() ?? string.Empty;
             if(!string.IsNullOrWhiteSpace(ip))

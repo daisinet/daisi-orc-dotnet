@@ -1,13 +1,15 @@
 using Daisi.Orc.Core.Data.Db;
 using Daisi.Orc.Core.Data.Models;
+using Daisi.Orc.Core.Services;
 using Daisi.Orc.Grpc.Authentication;
+using Daisi.Orc.Grpc.CommandServices.Containers;
 using Daisi.Protos.V1;
 using Grpc.Core;
 using Microsoft.AspNetCore.Authorization;
 
 namespace Daisi.Orc.Grpc.RPCServices.V1
 {
-    public class ModelsRPC(ILogger<ModelsRPC> logger, Cosmo cosmo) : ModelsProto.ModelsProtoBase
+    public class ModelsRPC(ILogger<ModelsRPC> logger, Cosmo cosmo, HuggingFaceService huggingFaceService) : ModelsProto.ModelsProtoBase
     {
         [HostsOnly]
         public async override Task<GetRequiredModelsResponse> GetRequiredModels(GetRequiredModelsRequest request, ServerCallContext context)
@@ -69,6 +71,111 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
         {
             var success = await cosmo.DeleteModelAsync(request.Id);
             return new DeleteModelResponse { Success = success };
+        }
+
+        [Authorize]
+        public async override Task<LookupHuggingFaceModelResponse> LookupHuggingFaceModel(LookupHuggingFaceModelRequest request, ServerCallContext context)
+        {
+            var result = await huggingFaceService.LookupModelAsync(request.RepoUrl);
+
+            var response = new LookupHuggingFaceModelResponse
+            {
+                Success = result.Success,
+                ErrorMessage = result.ErrorMessage ?? ""
+            };
+
+            if (result.Success && result.Model is not null)
+            {
+                var info = new HuggingFaceModelInfo
+                {
+                    RepoId = result.Model.RepoId,
+                    ModelName = result.Model.ModelName,
+                    PipelineTag = result.Model.PipelineTag,
+                    Downloads = result.Model.Downloads,
+                    Likes = result.Model.Likes,
+                    Architecture = result.Model.Architecture,
+                    ContextLength = result.Model.ContextLength
+                };
+                info.Tags.AddRange(result.Model.Tags);
+
+                foreach (var file in result.Model.GGUFFiles)
+                {
+                    info.GGUFFiles.Add(new HuggingFaceGGUFFile
+                    {
+                        FileName = file.FileName,
+                        QuantType = file.QuantType,
+                        SizeBytes = file.SizeBytes,
+                        DownloadUrl = file.DownloadUrl
+                    });
+                }
+
+                response.Model = info;
+            }
+
+            return response;
+        }
+
+        [Authorize]
+        public async override Task<GetModelUsageStatsResponse> GetModelUsageStats(GetModelUsageStatsRequest request, ServerCallContext context)
+        {
+            DateTime? startDate = request.Timeframe?.ToLowerInvariant() switch
+            {
+                "day" => DateTime.UtcNow.Date,
+                "week" => DateTime.UtcNow.AddDays(-7),
+                "month" => DateTime.UtcNow.AddMonths(-1),
+                "year" => DateTime.UtcNow.AddYears(-1),
+                "all" => null,
+                _ => DateTime.UtcNow.AddMonths(-1)
+            };
+
+            var stats = await cosmo.GetModelUsageStatsAsync(startDate);
+
+            var response = new GetModelUsageStatsResponse();
+            foreach (var stat in stats)
+            {
+                response.Stats.Add(new ModelUsageStatProto
+                {
+                    ModelName = stat.ModelName,
+                    InferenceCount = stat.InferenceCount,
+                    TotalTokens = stat.TotalTokens
+                });
+            }
+
+            return response;
+        }
+
+        [Authorize]
+        public override Task<GetModelHostAvailabilityResponse> GetModelHostAvailability(GetModelHostAvailabilityRequest request, ServerCallContext context)
+        {
+            var response = new GetModelHostAvailabilityResponse();
+
+            var modelHosts = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var hostOnline in HostContainer.HostsOnline.Values)
+            {
+                foreach (var modelName in hostOnline.LoadedModelNames)
+                {
+                    if (!modelHosts.TryGetValue(modelName, out var hostNames))
+                    {
+                        hostNames = new List<string>();
+                        modelHosts[modelName] = hostNames;
+                    }
+                    hostNames.Add(hostOnline.Host.Name);
+                }
+            }
+
+            foreach (var (modelName, hostNames) in modelHosts)
+            {
+                var info = new ModelHostInfo
+                {
+                    ModelName = modelName,
+                    HostCount = hostNames.Count
+                };
+                info.HostNames.AddRange(hostNames);
+                response.Models.Add(info);
+            }
+
+            return Task.FromResult(response);
         }
     }
 
