@@ -370,6 +370,11 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
         public string? ClientKeyId { get; set; }
 
         /// <summary>
+        /// Model names currently loaded on this host, updated from heartbeat data.
+        /// </summary>
+        public List<string> LoadedModelNames { get; set; } = new();
+
+        /// <summary>
         /// Key is the ID for the session that will receive these outgoing commands.
         /// These going to consumers in a session.
         /// </summary>

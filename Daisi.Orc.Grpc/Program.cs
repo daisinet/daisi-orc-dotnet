@@ -37,6 +37,8 @@ public partial class Program
         builder.Services.AddScoped<CreditService>();
         builder.Services.AddScoped<MarketplaceService>();
         builder.Services.AddSingleton<GitHubReleaseService>();
+        builder.Services.AddHttpClient();
+        builder.Services.AddSingleton<HuggingFaceService>();
 
         builder.Services.AddTransient<HeartbeatRequestCommandHandler>();
         builder.Services.AddTransient<SessionIncomingQueueHandler>();

@@ -24,13 +24,14 @@ namespace Daisi.Orc.Core.Data.Db
             return item.Resource;
         }
 
-        public async Task RecordInferenceMessageAsync(string hostId, string hostAccountId, string inferenceId, string sessionId, int tokenCount, float tokenProcessingSeconds)
+        public async Task RecordInferenceMessageAsync(string hostId, string hostAccountId, string inferenceId, string sessionId, int tokenCount, float tokenProcessingSeconds, string? modelName = null)
         {
             var container = await GetContainerAsync(InferencesContainerName);
 
             var inference = new Inference
             {
                 AccountId = hostAccountId,
+                ModelName = modelName ?? string.Empty,
                 DateCreated = DateTime.UtcNow,
                 DateLastMessage = DateTime.UtcNow,
                 CreatedSessionId = sessionId,
@@ -75,6 +76,35 @@ namespace Daisi.Orc.Core.Data.Db
 
             var results = new List<InferenceMessageStat>();
             using var iterator = container.GetItemQueryIterator<InferenceMessageStat>(queryDef);
+
+            while (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync();
+                results.AddRange(response);
+            }
+
+            return results;
+        }
+
+        public async Task<List<ModelUsageStat>> GetModelUsageStatsAsync(DateTime? startDate = null)
+        {
+            var container = await GetContainerAsync(InferencesContainerName);
+
+            var queryText = "SELECT c.ModelName, COUNT(1) AS InferenceCount, SUM(c.TotalTokenCount) AS TotalTokens " +
+                            "FROM c WHERE c.ModelName != '' AND c.ModelName != null";
+
+            if (startDate.HasValue)
+                queryText += " AND c.DateCreated >= @startDate";
+
+            queryText += " GROUP BY c.ModelName";
+
+            var queryDef = new QueryDefinition(queryText);
+
+            if (startDate.HasValue)
+                queryDef = queryDef.WithParameter("@startDate", startDate.Value);
+
+            var results = new List<ModelUsageStat>();
+            using var iterator = container.GetItemQueryIterator<ModelUsageStat>(queryDef);
 
             while (iterator.HasMoreResults)
             {
