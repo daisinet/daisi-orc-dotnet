@@ -30,6 +30,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 { nameof(HeartbeatRequest), typeof(HeartbeatRequestCommandHandler) },
                 { nameof(EnvironmentRequest), typeof(EnvironmentRequestCommandHandler) },
                 { nameof(InferenceReceipt), typeof(InferenceReceiptCommandHandler) },
+                { nameof(ExecuteToolRequest), typeof(ToolExecutionCommandHandler) },
             }
         );
 
@@ -113,6 +114,12 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                                 {
                                     logger.LogInformation($"INCOMING SESSION COMMAND \"{command.Name}\" from \"{host.Name}\" on SessionID {command.SessionId}");
                                     await sessionHandler.HandleAsync(host.Id, command, hostOnline.OutgoingQueue.Writer, context.CancellationToken);
+                                }
+                                else if (!string.IsNullOrEmpty(command.RequestId)
+                                    && hostOnline.RequestChannels.TryGetValue(command.RequestId, out var requestChannel))
+                                {
+                                    // Route per-request responses (e.g. ExecuteToolResponse from tools-only hosts)
+                                    requestChannel.Writer.TryWrite(command);
                                 }
                                 else
                                 {
