@@ -1,9 +1,9 @@
+using Daisi.Orc.Core.Data.Models;
 using Daisi.Orc.Grpc.CommandServices.Containers;
 using Daisi.Orc.Grpc.CommandServices.Handlers;
 using Daisi.Orc.Tests.Fakes;
 using Daisi.Protos.V1;
 using Google.Protobuf.WellKnownTypes;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Threading.Channels;
@@ -82,9 +82,14 @@ namespace Daisi.Orc.Tests.CommandServices
         [Fact]
         public async Task EnvironmentHandler_HandleHostUpdaterCheck_WritesToChannelWriter()
         {
-            // Test the static method that was updated from ConcurrentQueue to ChannelWriter
             var channel = Channel.CreateUnbounded<Command>();
             var fakeCosmo = new FakeCosmo();
+            fakeCosmo.Releases.Add(new HostRelease
+            {
+                ReleaseGroup = "production",
+                Version = "99.0.0",
+                IsActive = true
+            });
 
             var host = new Daisi.Orc.Core.Data.Models.Host
             {
@@ -93,15 +98,7 @@ namespace Daisi.Orc.Tests.CommandServices
                 ReleaseGroup = null
             };
 
-            // Build a minimal configuration with a minimum version
-            var configBuilder = new ConfigurationBuilder();
-            configBuilder.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                { "Daisi:MinimumHostVersion", "99.0.0" }
-            });
-            var config = configBuilder.Build();
-
-            await EnvironmentRequestCommandHandler.HandleHostUpdaterCheckAsync(channel.Writer, host, fakeCosmo, config, NullLogger.Instance);
+            await EnvironmentRequestCommandHandler.HandleHostUpdaterCheckAsync(channel.Writer, host, fakeCosmo, NullLogger.Instance);
 
             // Since version 0.0.1 < 99.0.0, an update command should have been written
             Assert.True(channel.Reader.TryRead(out var cmd));
@@ -113,6 +110,12 @@ namespace Daisi.Orc.Tests.CommandServices
         {
             var channel = Channel.CreateUnbounded<Command>();
             var fakeCosmo = new FakeCosmo();
+            fakeCosmo.Releases.Add(new HostRelease
+            {
+                ReleaseGroup = "production",
+                Version = "1.0.0",
+                IsActive = true
+            });
 
             var host = new Daisi.Orc.Core.Data.Models.Host
             {
@@ -121,14 +124,7 @@ namespace Daisi.Orc.Tests.CommandServices
                 ReleaseGroup = null
             };
 
-            var configBuilder = new ConfigurationBuilder();
-            configBuilder.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                { "Daisi:MinimumHostVersion", "1.0.0" }
-            });
-            var config = configBuilder.Build();
-
-            await EnvironmentRequestCommandHandler.HandleHostUpdaterCheckAsync(channel.Writer, host, fakeCosmo, config, NullLogger.Instance);
+            await EnvironmentRequestCommandHandler.HandleHostUpdaterCheckAsync(channel.Writer, host, fakeCosmo, NullLogger.Instance);
 
             // Version 99.0.0 >= 1.0.0, no update needed
             Assert.False(channel.Reader.TryRead(out _));

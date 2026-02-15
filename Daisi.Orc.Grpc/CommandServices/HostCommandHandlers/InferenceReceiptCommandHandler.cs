@@ -20,6 +20,16 @@ namespace Daisi.Orc.Grpc.CommandServices.HostCommandHandlers
         /// </summary>
         private static readonly ConcurrentDictionary<string, string> _consumerAccountCache = new();
 
+        /// <summary>
+        /// Tracks recently processed receipts to prevent duplicate credit awards.
+        /// Key: "{hostId}:{inferenceId}", Value: timestamp when first processed.
+        /// </summary>
+        internal static readonly ConcurrentDictionary<string, DateTime> ProcessedReceipts = new();
+
+        private static DateTime _lastCleanup = DateTime.UtcNow;
+        private static readonly TimeSpan CleanupInterval = TimeSpan.FromHours(1);
+        private static readonly TimeSpan EntryExpiry = TimeSpan.FromHours(24);
+
         public override async Task HandleAsync(
             string hostId,
             Command command,
@@ -34,6 +44,18 @@ namespace Daisi.Orc.Grpc.CommandServices.HostCommandHandlers
 
             var receipt = command.Payload.Unpack<InferenceReceipt>();
             var hostAccountId = hostOnline.Host.AccountId;
+
+            // Dedup check: skip if this receipt was already processed
+            var dedupKey = $"{hostId}:{receipt.InferenceId}";
+            if (!ProcessedReceipts.TryAdd(dedupKey, DateTime.UtcNow))
+            {
+                logger.LogWarning(
+                    $"Duplicate InferenceReceipt from host {hostId}, InferenceId={receipt.InferenceId} — skipping");
+                return;
+            }
+
+            // Periodic cleanup of expired entries
+            CleanupExpiredEntries();
 
             // Always persist token stats so the host dashboard works
             try
@@ -93,6 +115,21 @@ namespace Daisi.Orc.Grpc.CommandServices.HostCommandHandlers
                 {
                     logger.LogError(ex, $"Error processing credits for InferenceReceipt from host {hostId}");
                 }
+            }
+        }
+
+        private static void CleanupExpiredEntries()
+        {
+            if (DateTime.UtcNow - _lastCleanup < CleanupInterval)
+                return;
+
+            _lastCleanup = DateTime.UtcNow;
+            var cutoff = DateTime.UtcNow - EntryExpiry;
+
+            foreach (var kvp in ProcessedReceipts)
+            {
+                if (kvp.Value < cutoff)
+                    ProcessedReceipts.TryRemove(kvp.Key, out _);
             }
         }
     }

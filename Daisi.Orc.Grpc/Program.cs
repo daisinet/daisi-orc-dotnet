@@ -55,6 +55,7 @@ public partial class Program
         builder.Services.AddHostedService<SessionCleanupService>();
         builder.Services.AddHostedService<UptimeCreditService>();
         builder.Services.AddHostedService<SubscriptionRenewalService>();
+        builder.Services.AddHostedService<CreditAnomalyService>();
 
         var app = App = builder.Build();
 

@@ -15,7 +15,7 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
     /// <summary>
     /// Handles the commands received from Host to log the heartbeat.
     /// </summary>
-    public class HeartbeatRequestCommandHandler(Cosmo cosmo, OrcService orcService, ILogger<HeartbeatRequestCommandHandler> logger, IConfiguration configuration) : OrcCommandHandlerBase
+    public class HeartbeatRequestCommandHandler(Cosmo cosmo, OrcService orcService, ILogger<HeartbeatRequestCommandHandler> logger) : OrcCommandHandlerBase
     {
         public override async Task HandleAsync(string hostId, Command command, ChannelWriter<Command> responseQueue, CancellationToken cancellationToken = default)
         {
@@ -61,7 +61,7 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
                 Name = nameof(HeartbeatRequest)                
             });
 
-            await EnvironmentRequestCommandHandler.HandleHostUpdaterCheckAsync(responseQueue, hostOnline.Host, cosmo, configuration, logger);
+            await EnvironmentRequestCommandHandler.HandleHostUpdaterCheckAsync(responseQueue, hostOnline.Host, cosmo, logger);
 
             logger.LogInformation($"Handled Heartbeat for {hostOnline.Host.Name} at {DateTime.UtcNow} from IP {ip}");
         }

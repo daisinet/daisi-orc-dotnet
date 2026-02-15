@@ -1,4 +1,5 @@
 using Daisi.Orc.Core.Data.Db;
+using Daisi.Orc.Core.Data.Models;
 using Daisi.Orc.Core.Services;
 using Daisi.Orc.Grpc.Authentication;
 using Daisi.Protos.V1;
@@ -106,6 +107,109 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 Account = MapToProto(account)
             };
         }
+
+        public override async Task<GetCreditAnomaliesResponse> GetCreditAnomalies(
+            GetCreditAnomaliesRequest request, ServerCallContext context)
+        {
+            await EnsureAdminAsync(context);
+
+            var pageSize = request.PageSize > 0 ? request.PageSize : 20;
+            var pageIndex = request.PageIndex >= 0 ? request.PageIndex : 0;
+
+            var result = await cosmo.GetCreditAnomaliesAsync(
+                string.IsNullOrWhiteSpace(request.AccountId) ? null : request.AccountId,
+                request.HasType ? MapAnomalyType(request.Type) : null,
+                request.HasStatus ? MapAnomalyStatus(request.Status) : null,
+                pageSize,
+                pageIndex);
+
+            var response = new GetCreditAnomaliesResponse
+            {
+                TotalCount = result.TotalCount
+            };
+
+            foreach (var anomaly in result.Items)
+            {
+                response.Anomalies.Add(MapAnomalyToProto(anomaly));
+            }
+
+            return response;
+        }
+
+        public override async Task<ReviewCreditAnomalyResponse> ReviewCreditAnomaly(
+            ReviewCreditAnomalyRequest request, ServerCallContext context)
+        {
+            await EnsureAdminAsync(context);
+
+            var reviewerUserId = context.GetUserId();
+            var updated = await cosmo.UpdateCreditAnomalyStatusAsync(
+                request.AnomalyId,
+                request.AccountId,
+                MapAnomalyStatus(request.NewStatus),
+                reviewerUserId);
+
+            logger.LogInformation(
+                $"Anomaly {request.AnomalyId} reviewed by {reviewerUserId}: {request.NewStatus}");
+
+            return new ReviewCreditAnomalyResponse
+            {
+                Anomaly = MapAnomalyToProto(updated)
+            };
+        }
+
+        private async Task EnsureAdminAsync(ServerCallContext context)
+        {
+            var userId = context.GetUserId();
+            var accountId = context.GetAccountId();
+            if (userId is null || accountId is null)
+                throw new RpcException(new Status(StatusCode.PermissionDenied, "Authentication required."));
+
+            var user = await cosmo.GetUserAsync(userId, accountId);
+            if (user.Role < UserRoles.Admin)
+                throw new RpcException(new Status(StatusCode.PermissionDenied, "Admin access required."));
+        }
+
+        private static CreditAnomalyInfo MapAnomalyToProto(Orc.Core.Data.Models.CreditAnomaly anomaly)
+        {
+            var info = new CreditAnomalyInfo
+            {
+                Id = anomaly.Id,
+                AccountId = anomaly.AccountId,
+                HostId = anomaly.HostId ?? string.Empty,
+                Type = (Protos.V1.AnomalyType)anomaly.Type,
+                Severity = (Protos.V1.AnomalySeverity)anomaly.Severity,
+                Description = anomaly.Description ?? string.Empty,
+                Details = anomaly.Details ?? string.Empty,
+                Status = (Protos.V1.AnomalyStatus)anomaly.Status,
+                DateCreated = Timestamp.FromDateTime(DateTime.SpecifyKind(anomaly.DateCreated, DateTimeKind.Utc)),
+                ReviewedBy = anomaly.ReviewedBy ?? string.Empty
+            };
+
+            if (anomaly.DateReviewed.HasValue)
+                info.DateReviewed = Timestamp.FromDateTime(
+                    DateTime.SpecifyKind(anomaly.DateReviewed.Value, DateTimeKind.Utc));
+
+            return info;
+        }
+
+        private static Orc.Core.Data.Models.AnomalyType MapAnomalyType(Protos.V1.AnomalyType type) => type switch
+        {
+            Protos.V1.AnomalyType.ReceiptReplay => Orc.Core.Data.Models.AnomalyType.ReceiptReplay,
+            Protos.V1.AnomalyType.InflatedTokens => Orc.Core.Data.Models.AnomalyType.InflatedTokens,
+            Protos.V1.AnomalyType.ReceiptVolumeSpike => Orc.Core.Data.Models.AnomalyType.ReceiptVolumeSpike,
+            Protos.V1.AnomalyType.ZeroWorkUptime => Orc.Core.Data.Models.AnomalyType.ZeroWorkUptime,
+            Protos.V1.AnomalyType.CircularCreditFlow => Orc.Core.Data.Models.AnomalyType.CircularCreditFlow,
+            _ => Orc.Core.Data.Models.AnomalyType.ReceiptReplay
+        };
+
+        private static Orc.Core.Data.Models.AnomalyStatus MapAnomalyStatus(Protos.V1.AnomalyStatus status) => status switch
+        {
+            Protos.V1.AnomalyStatus.Open => Orc.Core.Data.Models.AnomalyStatus.Open,
+            Protos.V1.AnomalyStatus.Reviewed => Orc.Core.Data.Models.AnomalyStatus.Reviewed,
+            Protos.V1.AnomalyStatus.Dismissed => Orc.Core.Data.Models.AnomalyStatus.Dismissed,
+            Protos.V1.AnomalyStatus.ActionTaken => Orc.Core.Data.Models.AnomalyStatus.ActionTaken,
+            _ => Orc.Core.Data.Models.AnomalyStatus.Open
+        };
 
         private static string ResolveAccountId(string requestAccountId, ServerCallContext context)
         {

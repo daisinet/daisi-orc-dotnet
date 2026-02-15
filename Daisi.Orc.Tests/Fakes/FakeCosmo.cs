@@ -17,6 +17,7 @@ namespace Daisi.Orc.Tests.Fakes
         public List<CreditTransaction> Transactions { get; } = new();
         public List<UptimePeriod> UptimePeriods { get; } = new();
         public List<HostRelease> Releases { get; } = new();
+        public List<CreditAnomaly> CreditAnomalies { get; } = new();
 
         public FakeCosmo() : base(new ConfigurationBuilder().Build(), "unused")
         {
@@ -172,6 +173,54 @@ namespace Daisi.Orc.Tests.Fakes
         {
             var release = Releases.FirstOrDefault(r => r.ReleaseGroup == releaseGroup && r.IsActive);
             return Task.FromResult(release);
+        }
+
+        public override Task<CreditAnomaly> CreateCreditAnomalyAsync(CreditAnomaly anomaly)
+        {
+            if (string.IsNullOrWhiteSpace(anomaly.Id))
+                anomaly.Id = GenerateId(CreditAnomalyIdPrefix);
+            CreditAnomalies.Add(anomaly);
+            return Task.FromResult(anomaly);
+        }
+
+        public override Task<PagedResult<CreditAnomaly>> GetCreditAnomaliesAsync(
+            string? accountId = null,
+            AnomalyType? type = null,
+            AnomalyStatus? status = null,
+            int? pageSize = 20,
+            int? pageIndex = 0)
+        {
+            var query = CreditAnomalies.AsEnumerable();
+
+            if (!string.IsNullOrEmpty(accountId))
+                query = query.Where(a => a.AccountId == accountId);
+            if (type.HasValue)
+                query = query.Where(a => a.Type == type.Value);
+            if (status.HasValue)
+                query = query.Where(a => a.Status == status.Value);
+
+            var filtered = query.OrderByDescending(a => a.DateCreated).ToList();
+            var size = pageSize ?? 20;
+            var index = pageIndex ?? 0;
+
+            return Task.FromResult(new PagedResult<CreditAnomaly>
+            {
+                TotalCount = filtered.Count,
+                Items = filtered.Skip(index * size).Take(size).ToList()
+            });
+        }
+
+        public override Task<CreditAnomaly> UpdateCreditAnomalyStatusAsync(
+            string anomalyId, string accountId, AnomalyStatus newStatus, string? reviewedBy)
+        {
+            var anomaly = CreditAnomalies.FirstOrDefault(a => a.Id == anomalyId && a.AccountId == accountId);
+            if (anomaly is null)
+                throw new Exception($"Anomaly {anomalyId} not found for account {accountId}");
+
+            anomaly.Status = newStatus;
+            anomaly.DateReviewed = DateTime.UtcNow;
+            anomaly.ReviewedBy = reviewedBy;
+            return Task.FromResult(anomaly);
         }
     }
 }

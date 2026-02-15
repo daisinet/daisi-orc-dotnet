@@ -6,7 +6,7 @@ using System.Threading.Channels;
 
 namespace Daisi.Orc.Grpc.CommandServices.Handlers
 {
-    public class EnvironmentRequestCommandHandler(ILogger<EnvironmentRequestCommandHandler> logger, Cosmo cosmo, IConfiguration configuration) : OrcCommandHandlerBase
+    public class EnvironmentRequestCommandHandler(ILogger<EnvironmentRequestCommandHandler> logger, Cosmo cosmo) : OrcCommandHandlerBase
     {
         public override async Task HandleAsync(string hostId, Command command, ChannelWriter<Command> responseQueue, CancellationToken cancellationToken = default)
         {
@@ -20,127 +20,72 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
 
                 await cosmo.PatchHostEnvironmentAsync(host.Host);
 
-                await HandleHostUpdaterCheckAsync(responseQueue, host.Host, cosmo, configuration, logger);
+                await HandleHostUpdaterCheckAsync(responseQueue, host.Host, cosmo, logger);
             }
         }
 
-        public static async Task HandleHostUpdaterCheckAsync(ChannelWriter<Command> responseQueue, Core.Data.Models.Host host, Cosmo cosmo, IConfiguration configuration, ILogger logger)
+        public static async Task HandleHostUpdaterCheckAsync(ChannelWriter<Command> responseQueue, Core.Data.Models.Host host, Cosmo cosmo, ILogger logger)
         {
             var isDesktop = host.OperatingSystem == "Windows"
                          || host.OperatingSystem == "MacCatalyst"
                          || host.OperatingSystem == "MacOS"
                          || host.OperatingSystem == "Linux";
 
-            if (isDesktop)
+            if (!isDesktop)
+                return;
+
+            var releaseGroup = host.ReleaseGroup ?? "production";
+
+            var activeRelease = await cosmo.GetActiveReleaseAsync(releaseGroup);
+
+            // Production releases act as a version floor for all groups.
+            // If the host is in a non-production group, also check the production
+            // release and use whichever has the higher version.
+            var chosenRelease = activeRelease;
+            var chosenChannel = releaseGroup;
+
+            if (releaseGroup != "production")
             {
-                var releaseGroup = host.ReleaseGroup ?? "production";
+                var productionRelease = await cosmo.GetActiveReleaseAsync("production");
 
-                try
+                if (productionRelease != null)
                 {
-                    var activeRelease = await cosmo.GetActiveReleaseAsync(releaseGroup);
-
-                    // Production releases act as a version floor for all groups.
-                    // If the host is in a non-production group, also check the production
-                    // release and use whichever has the higher version.
-                    var chosenRelease = activeRelease;
-                    var chosenChannel = releaseGroup;
-
-                    if (releaseGroup != "production")
+                    if (chosenRelease == null)
                     {
-                        var productionRelease = await cosmo.GetActiveReleaseAsync("production");
-
-                        if (productionRelease != null)
-                        {
-                            if (chosenRelease == null)
-                            {
-                                chosenRelease = productionRelease;
-                                chosenChannel = "production";
-                            }
-                            else
-                            {
-                                var groupVersion = Version.Parse(chosenRelease.Version);
-                                var prodVersion = Version.Parse(productionRelease.Version);
-
-                                if (prodVersion > groupVersion)
-                                {
-                                    chosenRelease = productionRelease;
-                                    chosenChannel = "production";
-                                }
-                            }
-                        }
+                        chosenRelease = productionRelease;
+                        chosenChannel = "production";
                     }
-
-                    if (chosenRelease != null)
+                    else
                     {
-                        var currentVersion = Version.Parse(host.AppVersion);
-                        var releaseVersion = Version.Parse(chosenRelease.Version);
+                        var groupVersion = Version.Parse(chosenRelease.Version);
+                        var prodVersion = Version.Parse(productionRelease.Version);
 
-                        if (currentVersion < releaseVersion)
+                        if (prodVersion > groupVersion)
                         {
-                            var rid = MapOperatingSystemToRid(host.OperatingSystem);
-                            var hostAppUrl = $"{chosenRelease.DownloadUrl}/{rid}/DaisiHost-latest.zip";
-
-                            // Send both Channel (for Velopack hosts) and HostAppUrl (for legacy hosts).
-                            // New hosts check Channel first; legacy hosts read HostAppUrl.
-                            responseQueue.TryWrite(new Command()
-                            {
-                                Name = nameof(UpdateRequiredRequest),
-                                Payload = Any.Pack(new UpdateRequiredRequest()
-                                {
-                                    Channel = chosenChannel,
-                                    HostAppUrl = hostAppUrl
-                                })
-                            });
+                            chosenRelease = productionRelease;
+                            chosenChannel = "production";
                         }
-
-                        return;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Failed to check DB release for group {Group}, falling back to config", releaseGroup);
-                }
-
-                // Fallback to config-based check for backward compatibility
-                string key = "Daisi:MinimumHostVersion";
-
-                if (!string.IsNullOrWhiteSpace(host.ReleaseGroup))
-                {
-                    key += $"-{host.ReleaseGroup}";
-                }
-
-                var minimumHostVersion = configuration.GetValue<Version>(key);
-
-                if (minimumHostVersion != null)
-                {
-                    var currentVersion = Version.Parse(host.AppVersion);
-
-                    if (currentVersion < minimumHostVersion)
-                    {
-                        responseQueue.TryWrite(new Command()
-                        {
-                            Name = nameof(UpdateRequiredRequest),
-                            Payload = Any.Pack(new UpdateRequiredRequest() { Channel = host.ReleaseGroup ?? "production" })
-                        });
                     }
                 }
             }
-            else
-            {
-                //Mobile Update Check
 
+            if (chosenRelease == null)
+                return;
+
+            var currentVersion = Version.Parse(host.AppVersion);
+            var releaseVersion = Version.Parse(chosenRelease.Version);
+
+            if (currentVersion < releaseVersion)
+            {
+                responseQueue.TryWrite(new Command()
+                {
+                    Name = nameof(UpdateRequiredRequest),
+                    Payload = Any.Pack(new UpdateRequiredRequest()
+                    {
+                        Channel = chosenChannel
+                    })
+                });
             }
-        }
-
-        private static string MapOperatingSystemToRid(string operatingSystem)
-        {
-            return operatingSystem switch
-            {
-                "Windows" => "win-x64",
-                "Linux" => "linux-x64",
-                "MacOS" or "MacCatalyst" => "osx-x64",
-                _ => "win-x64"
-            };
         }
 
         /// <summary>

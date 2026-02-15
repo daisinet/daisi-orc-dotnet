@@ -14,8 +14,6 @@ namespace Daisi.Orc.Core.Services
         private static HostOrc? _cachedHostOrc;
 
         public string? AccountId => configuration[$"Daisi:{nameof(AccountId)}"];
-        public string? MinimumHostVersion => configuration[$"Daisi:{nameof(MinimumHostVersion)}"];
-        public string? MinimumHostVersion_Beta => configuration[$"Daisi:MinimumHostVersion-beta"];
         public int? MaxHosts {
             get {
                 var maxHostsString = configuration[$"Daisi:{nameof(MaxHosts)}"];
