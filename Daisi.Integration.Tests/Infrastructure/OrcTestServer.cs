@@ -50,7 +50,7 @@ public class OrcTestServer : IDisposable
             Enabled = true,
             LoadAtStartup = false,
             HasReasoning = false,
-            LLama = new Daisi.Orc.Core.Data.Models.DaisiModelLLamaSettings
+            Backend = new Daisi.Orc.Core.Data.Models.DaisiModelBackendSettings
             {
                 Runtime = 0,
                 ContextSize = 8192,
