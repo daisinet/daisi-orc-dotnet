@@ -40,7 +40,7 @@ namespace Daisi.Orc.Core.Data.Db
                 return null;
             }
         }
-        public async Task<Host?> GetHostAsync(string accountId, string hostId)
+        public virtual async Task<Host?> GetHostAsync(string accountId, string hostId)
         {
             var container = await GetContainerAsync(HostsContainerName);
             try

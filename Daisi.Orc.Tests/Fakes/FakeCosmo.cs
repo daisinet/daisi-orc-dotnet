@@ -18,6 +18,7 @@ namespace Daisi.Orc.Tests.Fakes
         public List<UptimePeriod> UptimePeriods { get; } = new();
         public List<HostRelease> Releases { get; } = new();
         public List<CreditAnomaly> CreditAnomalies { get; } = new();
+        public List<Host> Hosts { get; } = new();
 
         public FakeCosmo() : base(new ConfigurationBuilder().Build(), "unused")
         {
@@ -167,6 +168,12 @@ namespace Daisi.Orc.Tests.Fakes
                 TotalMinutes = totalMinutes,
                 CreditsPaid = 0
             });
+        }
+
+        public override Task<Host?> GetHostAsync(string accountId, string hostId)
+        {
+            var host = Hosts.FirstOrDefault(h => h.AccountId == accountId && h.Id == hostId);
+            return Task.FromResult(host);
         }
 
         public override Task<HostRelease?> GetActiveReleaseAsync(string releaseGroup)
