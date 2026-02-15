@@ -75,6 +75,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 host.Name = request.Host.Name;
                 host.DirectConnect = request.Host.DirectConnect;
                 host.PeerConnect = request.Host.PeerConnect;
+                host.ToolsOnly = request.Host.ToolsOnly;
                 host.ReleaseGroup = request.Host.ReleaseGroup ?? host.ReleaseGroup;
 
                 await HostContainer.UpdateConfigurableWebSettingsAsync(host);
@@ -114,6 +115,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 Region = host.Region.ToString(),
                 DirectConnect = host.DirectConnect,
                 PeerConnect = host.PeerConnect,
+                ToolsOnly = host.ToolsOnly,
                 Status = host.Status,
                 ReleaseGroup = host.ReleaseGroup,
             }));
@@ -235,7 +237,8 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 OperatingSystem = request.Host.OperatingSystem,
                 OperatingSystemVersion = request.Host.OperatingSystemVersion,
                 DirectConnect = request.Host.DirectConnect,
-                PeerConnect = request.Host.PeerConnect
+                PeerConnect = request.Host.PeerConnect,
+                ToolsOnly = request.Host.ToolsOnly
             };
 
             host = await cosmo.CreateHostAsync(host);

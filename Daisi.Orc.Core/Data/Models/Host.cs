@@ -27,6 +27,7 @@ namespace Daisi.Orc.Core.Data.Models
         public HostStatus Status { get; set; }
         public bool DirectConnect { get; set; } = false;
         public bool PeerConnect { get; set; } = false;
+        public bool ToolsOnly { get; set; } = false;
         public string AppVersion { get; set; }
         public HostOrc? ConnectedOrc { get; set;  }
         public string UpdateOperation { get; set;  }
