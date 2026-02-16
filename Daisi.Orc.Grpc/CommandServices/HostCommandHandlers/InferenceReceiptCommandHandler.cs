@@ -67,7 +67,8 @@ namespace Daisi.Orc.Grpc.CommandServices.HostCommandHandlers
                     receipt.InferenceId,
                     receipt.SessionId,
                     receipt.TokenCount,
-                    tokenProcessingSeconds);
+                    tokenProcessingSeconds,
+                    receipt.ModelName);
             }
             catch (Exception ex)
             {

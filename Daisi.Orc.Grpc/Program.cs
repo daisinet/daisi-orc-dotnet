@@ -39,12 +39,15 @@ public partial class Program
         builder.Services.AddScoped<SecureToolService>();
         builder.Services.AddHttpClient();
         builder.Services.AddSingleton<GitHubReleaseService>();
+        builder.Services.AddHttpClient();
+        builder.Services.AddSingleton<HuggingFaceService>();
 
         builder.Services.AddTransient<HeartbeatRequestCommandHandler>();
         builder.Services.AddTransient<SessionIncomingQueueHandler>();
         builder.Services.AddTransient<EnvironmentRequestCommandHandler>();
         builder.Services.AddTransient<InferenceCommandHandler>();
         builder.Services.AddTransient<InferenceReceiptCommandHandler>();
+        builder.Services.AddTransient<ToolExecutionCommandHandler>();
 
         // Add services to the container.
         builder.Services.AddGrpc(options =>

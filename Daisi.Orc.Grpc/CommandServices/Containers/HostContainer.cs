@@ -115,7 +115,8 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
             var accountId = context.GetAccountId();
 
             var q = HostsOnline.Values.Where(h =>
-                   (string.IsNullOrEmpty(request.HostId) || (accountId is not null && h.Host.AccountId == accountId && h.Host.Id == request.HostId))
+                   !h.Host.ToolsOnly
+                && (string.IsNullOrEmpty(request.HostId) || (accountId is not null && h.Host.AccountId == accountId && h.Host.Id == request.HostId))
                 //&& (request.NetworkName is null || (accountId is not null && h.Host.AccountId == accountId && (h.Host.ConnectedOrc?.Networks.Any(n=>n.Name == request.NetworkName) ?? false)))
                 && (!request.PreferredHostNames.Any() || request.PreferredHostNames.Contains(h.Host.Name))
                 && (!request.DirectConnectRequired || h.Host.DirectConnect)
@@ -141,6 +142,69 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
                 Port = hostOnline.Host.Port,
                 DirectConnect = hostOnline.Host.DirectConnect,
             };
+        }
+
+        /// <summary>
+        /// Sends a tool execution request to a specific tools-only host and waits for the response.
+        /// Uses the host's outgoing queue (non-session command path).
+        /// </summary>
+        public static async Task<ExecuteToolResponse?> SendToolExecutionToHostAsync(string toolsOnlyHostId, ExecuteToolRequest request, int millisecondsToWait = 30000)
+        {
+            if (!HostsOnline.TryGetValue(toolsOnlyHostId, out var hostOnline))
+                return null;
+
+            string requestId = $"req-{SDK.Extensions.StringExtensions.Random()}";
+            var requestChannel = Channel.CreateUnbounded<Command>();
+            hostOnline.RequestChannels.TryAdd(requestId, requestChannel);
+
+            try
+            {
+                Command command = new()
+                {
+                    Name = nameof(ExecuteToolRequest),
+                    Payload = Any.Pack(request),
+                    RequestId = requestId
+                };
+                hostOnline.OutgoingQueue.Writer.TryWrite(command);
+
+                using var cts = new CancellationTokenSource(millisecondsToWait);
+
+                await foreach (var inCommand in requestChannel.Reader.ReadAllAsync(cts.Token))
+                {
+                    if (inCommand.Name == nameof(ExecuteToolResponse))
+                    {
+                        if (inCommand.Payload.TryUnpack<ExecuteToolResponse>(out var response))
+                            return response;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Program.App.Logger.LogError("Timeout waiting for tool execution response from host {HostId}", toolsOnlyHostId);
+            }
+            finally
+            {
+                hostOnline.RequestChannels.TryRemove(requestId, out _);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Finds the next available tools-only host for tool delegation, ordered by least-recently-used.
+        /// </summary>
+        public static HostOnline? GetNextToolsOnlyHost(string accountId)
+        {
+            var q = HostsOnline.Values.Where(h =>
+                h.Host.ToolsOnly
+                && h.Host.AccountId == accountId
+                && h.Host.Status == HostStatus.Online
+            );
+
+            if (!q.Any())
+                return null;
+
+            return q.OrderBy(h => h.Host.DateLastSession).First();
         }
 
         public static async Task<ResponseT> SendToHostAndWaitAsync<RequestT, ResponseT>(DaisiSession session, RequestT request, int millisecondsToWait = 10000)
@@ -293,6 +357,7 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
                 var inmem = HostsOnline[host.Id].Host;
                 inmem.PeerConnect = host.PeerConnect;
                 inmem.DirectConnect = host.DirectConnect;
+                inmem.ToolsOnly = host.ToolsOnly;
                 inmem.Name = host.Name;
             }
         }
@@ -368,6 +433,11 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
         /// without re-querying the key document.
         /// </summary>
         public string? ClientKeyId { get; set; }
+
+        /// <summary>
+        /// Model names currently loaded on this host, updated from heartbeat data.
+        /// </summary>
+        public List<string> LoadedModelNames { get; set; } = new();
 
         /// <summary>
         /// Key is the ID for the session that will receive these outgoing commands.
