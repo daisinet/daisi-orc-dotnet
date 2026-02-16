@@ -43,9 +43,11 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
 
             var dbHost = await cosmo.PatchHostForHeartbeatAsync(hostOnline.Host);
 
-            // Sync fields that may have changed in the DB (e.g. ReleaseGroup updated via Manager UI)
+            // Sync fields that may have changed in the DB (e.g. ReleaseGroup updated via Manager UI).
+            // Only overwrite with non-null DB values to avoid clearing data set by EnvironmentRequest.
             hostOnline.Host.ReleaseGroup = dbHost.ReleaseGroup;
-            hostOnline.Host.AppVersion = dbHost.AppVersion;
+            if (!string.IsNullOrEmpty(dbHost.AppVersion))
+                hostOnline.Host.AppVersion = dbHost.AppVersion;
 
             // Use cached client key ID from HostOnline to extend TTL with a single patch
             // instead of GetKeyAsync + full document upsert (saves 1 read + reduces write cost)
@@ -67,7 +69,15 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
                 Name = nameof(HeartbeatRequest)                
             });
 
-            await EnvironmentRequestCommandHandler.HandleHostUpdaterCheckAsync(responseQueue, hostOnline.Host, cosmo, logger);
+            try
+            {
+                await EnvironmentRequestCommandHandler.HandleHostUpdaterCheckAsync(responseQueue, hostOnline.Host, cosmo, logger);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Update check failed for host {HostName} (OS={OS}, Version={Version})",
+                    hostOnline.Host.Name, hostOnline.Host.OperatingSystem, hostOnline.Host.AppVersion);
+            }
 
             logger.LogInformation($"Handled Heartbeat for {hostOnline.Host.Name} at {DateTime.UtcNow} from IP {ip}");
         }
