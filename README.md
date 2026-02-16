@@ -63,6 +63,41 @@ The ORC includes an async anomaly detection system that scans for suspicious cre
 - **No auto-penalization** — anomalies are flagged for human review, not auto-acted on
 - **After-the-fact detection** — all checks run asynchronously in a background service
 
+### Tool Delegation Routing
+
+The ORC supports **tool delegation** for tools-only hosts. When a host is marked as `ToolsOnly`, it is excluded from inference session routing but remains available to execute tools on behalf of other hosts.
+
+**How it works:**
+1. An inference host sends an `ExecuteToolRequest` command to the ORC via the command channel.
+2. The ORC's `ToolExecutionCommandHandler` finds an available tools-only host in the same account using `GetNextToolsOnlyHost()` (LRU ordering).
+3. The ORC forwards the request to the tools-only host via `SendToolExecutionToHostAsync()`.
+4. The tools-only host executes the tool and returns an `ExecuteToolResponse`.
+5. The ORC relays the response back to the requesting inference host.
+
+The `Host` data model includes a `ToolsOnly` boolean field that is:
+- Persisted in Cosmos DB (included in `PatchHostForWebUpdateAsync`)
+- Synced to in-memory state via `UpdateConfigurableWebSettingsAsync`
+- Propagated through `HostsRPC.Register`, `Update`, and `GetHosts`
+- Filterable in `GetNextHost()` (tools-only hosts are excluded) and `GetNextToolsOnlyHost()` (only tools-only hosts are returned)
+
+### Secure Tool Lifecycle (Install/Uninstall + Discovery)
+
+The ORC manages the secure tool lifecycle — install/uninstall notifications and tool discovery — but is **not** in the execution hot path. Consumer hosts and the Manager UI call providers directly via HTTP.
+
+**Key components:**
+- `SecureToolService` — Handles `NotifyProviderInstallAsync` (HTTP POST to provider `/install` on purchase), `NotifyProviderUninstallAsync` (HTTP POST to provider `/uninstall` on deactivation), and `GetInstalledToolsAsync` (queries purchases and returns tool definitions with `InstallId` and `EndpointUrl` for direct provider communication).
+- `SecureToolRPC` — gRPC service implementing `SecureToolProto.SecureToolProtoBase` with `GetInstalledSecureTools` only. Returns `InstallId` and `EndpointUrl` per tool.
+- `MarketplacePurchase.SecureInstallId` — Opaque identifier generated on purchase, shared with the provider. Never contains AccountId.
+- `MarketplaceItem` extensions — Fields: `IsSecureExecution`, `SecureEndpointUrl`, `SecureAuthKey`, `SetupParameters`, `SecureToolDefinition`.
+
+**Architecture:**
+- On purchase, the ORC generates an `InstallId` (via `Cosmo.GenerateId("inst")`) and HTTP POSTs to the provider's `/install` endpoint with `X-Daisi-Auth`.
+- On deactivation (subscription expiry, cancellation), the ORC HTTP POSTs to `/uninstall`.
+- Hosts and Manager call `/execute` and `/configure` directly using the `InstallId` — no ORC relay.
+- For free approved tools, a deterministic `InstallId` is generated from a SHA-256 hash of `accountId:itemId` so AccountId is never exposed.
+
+**Provider API contract:** Providers implement four HTTP POST endpoints (`/install`, `/uninstall`, `/configure`, `/execute`) documented in the [Secure Tool API Reference](https://daisi.ai/learn/marketplace/secure-tool-api-reference).
+
 ### Project - Daisi.Orc.Core
 This is the core library that contains various interfaces and a CosmoDb repository, which is used by default. Abstraction for other databases and repository types is planned, but not yet implemented.
 

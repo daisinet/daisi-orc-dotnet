@@ -118,6 +118,47 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
         existing.BundledItemIds = request.Item.BundledItemIds.ToList();
         existing.RejectionReason = request.Item.RejectionReason;
 
+        // Secure execution fields
+        existing.IsSecureExecution = request.Item.IsSecureExecution;
+        existing.SecureEndpointUrl = request.Item.SecureEndpointUrl;
+        existing.SecureAuthKey = request.Item.SecureAuthKey;
+
+        if (request.Item.SetupParameters.Count > 0)
+        {
+            existing.SetupParameters = request.Item.SetupParameters.Select(sp => new SetupParameterData
+            {
+                Name = sp.Name,
+                Description = sp.Description,
+                Type = sp.Type,
+                IsRequired = sp.IsRequired
+            }).ToList();
+        }
+        else
+        {
+            existing.SetupParameters = [];
+        }
+
+        if (request.Item.SecureToolDefinition is not null)
+        {
+            existing.SecureToolDefinition = new SecureToolDefinitionData
+            {
+                ToolId = request.Item.SecureToolDefinition.ToolId,
+                Name = request.Item.SecureToolDefinition.Name,
+                UseInstructions = request.Item.SecureToolDefinition.UseInstructions,
+                ToolGroup = request.Item.SecureToolDefinition.ToolGroup,
+                Parameters = request.Item.SecureToolDefinition.Parameters.Select(p => new SecureToolParameterData
+                {
+                    Name = p.Name,
+                    Description = p.Description,
+                    IsRequired = p.IsRequired
+                }).ToList()
+            };
+        }
+        else if (!request.Item.IsSecureExecution)
+        {
+            existing.SecureToolDefinition = null;
+        }
+
         if (!string.IsNullOrEmpty(request.Item.ReviewedBy))
         {
             existing.ReviewedBy = request.Item.ReviewedBy;
@@ -619,6 +660,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
             AverageRating = item.AverageRating,
             RatingCount = item.RatingCount,
             IsFeatured = item.IsFeatured,
+            IsSecureExecution = item.IsSecureExecution,
+            SecureEndpointUrl = item.SecureEndpointUrl ?? string.Empty,
+            SecureAuthKey = item.SecureAuthKey ?? string.Empty,
             CreatedAt = Timestamp.FromDateTime(DateTime.SpecifyKind(item.CreatedAt, DateTimeKind.Utc)),
             UpdatedAt = Timestamp.FromDateTime(DateTime.SpecifyKind(item.UpdatedAt, DateTimeKind.Utc))
         };
@@ -630,12 +674,50 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
         info.Screenshots.AddRange(item.Screenshots ?? []);
         info.BundledItemIds.AddRange(item.BundledItemIds ?? []);
 
+        // Map setup parameters
+        if (item.SetupParameters?.Count > 0)
+        {
+            foreach (var sp in item.SetupParameters)
+            {
+                info.SetupParameters.Add(new SecureToolSetupParameter
+                {
+                    Name = sp.Name,
+                    Description = sp.Description,
+                    Type = sp.Type,
+                    IsRequired = sp.IsRequired
+                });
+            }
+        }
+
+        // Map secure tool definition
+        if (item.SecureToolDefinition is not null)
+        {
+            var def = new SecureToolDefinitionInfo
+            {
+                MarketplaceItemId = item.Id ?? string.Empty,
+                ToolId = item.SecureToolDefinition.ToolId,
+                Name = item.SecureToolDefinition.Name,
+                UseInstructions = item.SecureToolDefinition.UseInstructions,
+                ToolGroup = item.SecureToolDefinition.ToolGroup
+            };
+            foreach (var p in item.SecureToolDefinition.Parameters)
+            {
+                def.Parameters.Add(new SecureToolParameterInfo
+                {
+                    Name = p.Name,
+                    Description = p.Description,
+                    IsRequired = p.IsRequired
+                });
+            }
+            info.SecureToolDefinition = def;
+        }
+
         return info;
     }
 
     private static MarketplaceItem MapFromProto(MarketplaceItemInfo info)
     {
-        return new MarketplaceItem
+        var item = new MarketplaceItem
         {
             AccountId = info.AccountId,
             ProviderId = info.ProviderId,
@@ -655,8 +737,41 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
             CreditPrice = info.CreditPrice,
             SubscriptionCreditPrice = info.SubscriptionCreditPrice,
             SubscriptionPeriodDays = info.SubscriptionPeriodDays,
-            Visibility = info.Visibility
+            Visibility = info.Visibility,
+            IsSecureExecution = info.IsSecureExecution,
+            SecureEndpointUrl = info.SecureEndpointUrl,
+            SecureAuthKey = info.SecureAuthKey
         };
+
+        if (info.SetupParameters.Count > 0)
+        {
+            item.SetupParameters = info.SetupParameters.Select(sp => new SetupParameterData
+            {
+                Name = sp.Name,
+                Description = sp.Description,
+                Type = sp.Type,
+                IsRequired = sp.IsRequired
+            }).ToList();
+        }
+
+        if (info.SecureToolDefinition is not null)
+        {
+            item.SecureToolDefinition = new SecureToolDefinitionData
+            {
+                ToolId = info.SecureToolDefinition.ToolId,
+                Name = info.SecureToolDefinition.Name,
+                UseInstructions = info.SecureToolDefinition.UseInstructions,
+                ToolGroup = info.SecureToolDefinition.ToolGroup,
+                Parameters = info.SecureToolDefinition.Parameters.Select(p => new SecureToolParameterData
+                {
+                    Name = p.Name,
+                    Description = p.Description,
+                    IsRequired = p.IsRequired
+                }).ToList()
+            };
+        }
+
+        return item;
     }
 
     private static MarketplacePurchaseInfo MapPurchaseToProto(MarketplacePurchase purchase)
@@ -672,7 +787,8 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
             TransactionId = purchase.TransactionId ?? string.Empty,
             IsSubscription = purchase.IsSubscription,
             IsActive = purchase.IsActive,
-            PurchasedAt = Timestamp.FromDateTime(DateTime.SpecifyKind(purchase.PurchasedAt, DateTimeKind.Utc))
+            PurchasedAt = Timestamp.FromDateTime(DateTime.SpecifyKind(purchase.PurchasedAt, DateTimeKind.Utc)),
+            SecureInstallId = purchase.SecureInstallId ?? string.Empty
         };
 
         if (purchase.SubscriptionExpiresAt.HasValue)
