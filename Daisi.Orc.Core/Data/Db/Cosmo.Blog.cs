@@ -26,6 +26,34 @@ namespace Daisi.Orc.Core.Data.Db
             return blogs;
         }
 
+        public async Task<(List<Blog> Blogs, int TotalCount)> GetBlogsPagedAsync(int page = 1, int pageSize = 9)
+        {
+            var container = await GetContainerAsync(BlogsContainerName);
+
+            var countQuery = container.GetItemQueryIterator<int>("SELECT VALUE COUNT(1) FROM c");
+            int totalCount = 0;
+            while (countQuery.HasMoreResults)
+            {
+                var response = await countQuery.ReadNextAsync();
+                totalCount = response.FirstOrDefault();
+            }
+
+            int offset = (page - 1) * pageSize;
+            var query = new QueryDefinition($"SELECT * FROM c ORDER BY c.DateCreated DESC OFFSET @offset LIMIT @limit")
+                .WithParameter("@offset", offset)
+                .WithParameter("@limit", pageSize);
+
+            var it = container.GetItemQueryIterator<Blog>(query);
+            var blogs = new List<Blog>();
+            while (it.HasMoreResults)
+            {
+                var response = await it.ReadNextAsync();
+                blogs.AddRange(response.Resource);
+            }
+
+            return (blogs, totalCount);
+        }
+
         public async Task<Blog> CreateBlogAsync(Blog blog)
         {
             var container = await GetContainerAsync(BlogsContainerName);
