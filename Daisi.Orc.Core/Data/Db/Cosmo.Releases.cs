@@ -26,15 +26,31 @@ namespace Daisi.Orc.Core.Data.Db
             var query = new QueryDefinition("SELECT * FROM c WHERE c.ReleaseGroup = @group AND c.IsActive = true")
                 .WithParameter("@group", releaseGroup);
 
+            HostRelease? best = null;
+            Version? bestVersion = null;
+
             using FeedIterator<HostRelease> iterator = container.GetItemQueryIterator<HostRelease>(query);
             while (iterator.HasMoreResults)
             {
                 FeedResponse<HostRelease> response = await iterator.ReadNextAsync();
-                if (response.Count > 0)
-                    return response.First();
+                foreach (var release in response)
+                {
+                    if (Version.TryParse(release.Version, out var v))
+                    {
+                        if (best == null || bestVersion == null || v > bestVersion)
+                        {
+                            best = release;
+                            bestVersion = v;
+                        }
+                    }
+                    else
+                    {
+                        best ??= release;
+                    }
+                }
             }
 
-            return null;
+            return best;
         }
 
         public async Task<List<HostRelease>> GetReleasesAsync(string releaseGroup)
