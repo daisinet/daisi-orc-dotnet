@@ -34,49 +34,36 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
             if (!isDesktop)
                 return;
 
-            var releaseGroup = host.ReleaseGroup ?? "production";
+            // Always start with the production release as the baseline for all hosts.
+            var productionRelease = await cosmo.GetActiveReleaseAsync("production");
+            var chosenRelease = productionRelease;
+            var chosenChannel = "production";
 
-            var activeRelease = await cosmo.GetActiveReleaseAsync(releaseGroup);
-
-            // Production releases act as a version floor for all groups.
-            // If the host is in a non-production group, also check the production
-            // release and use whichever has the higher version.
-            var chosenRelease = activeRelease;
-            var chosenChannel = releaseGroup;
-
-            if (releaseGroup != "production")
+            // If the host belongs to a non-production group, check that group too
+            // and pick whichever release has the higher version.
+            var releaseGroup = host.ReleaseGroup;
+            if (!string.IsNullOrEmpty(releaseGroup) && releaseGroup != "production")
             {
-                var productionRelease = await cosmo.GetActiveReleaseAsync("production");
-
-                if (productionRelease != null)
+                var groupRelease = await cosmo.GetActiveReleaseAsync(releaseGroup);
+                if (groupRelease != null && Version.TryParse(groupRelease.Version, out var groupVersion))
                 {
-                    if (chosenRelease == null)
+                    if (chosenRelease == null || !Version.TryParse(chosenRelease.Version, out var prodVersion) || groupVersion > prodVersion)
                     {
-                        chosenRelease = productionRelease;
-                        chosenChannel = "production";
-                    }
-                    else
-                    {
-                        var groupVersion = Version.Parse(chosenRelease.Version);
-                        var prodVersion = Version.Parse(productionRelease.Version);
-
-                        if (prodVersion > groupVersion)
-                        {
-                            chosenRelease = productionRelease;
-                            chosenChannel = "production";
-                        }
+                        chosenRelease = groupRelease;
+                        chosenChannel = releaseGroup;
                     }
                 }
             }
 
-            if (chosenRelease == null)
+            if (chosenRelease == null || !Version.TryParse(chosenRelease.Version, out var releaseVersion))
                 return;
 
-            var currentVersion = Version.Parse(host.AppVersion);
-            var releaseVersion = Version.Parse(chosenRelease.Version);
-
-            if (currentVersion < releaseVersion)
+            // If the host has no version yet, it always needs the update
+            if (!Version.TryParse(host.AppVersion, out var currentVersion) || currentVersion < releaseVersion)
             {
+                logger.LogInformation("Update required for {Host}: {Current} → {Release} ({Channel})",
+                    host.Name, host.AppVersion ?? "unknown", chosenRelease.Version, chosenChannel);
+
                 responseQueue.TryWrite(new Command()
                 {
                     Name = nameof(UpdateRequiredRequest),
