@@ -241,6 +241,295 @@ namespace Daisi.Orc.Tests.Services
             Assert.Equal(original.ThinkLevels.Count, roundTripped.ThinkLevels.Count);
         }
 
+        [Fact]
+        public void ConvertToProto_Type_MapsCorrectly()
+        {
+            var dbModel = new DaisiModel
+            {
+                Name = "Image Model",
+                FileName = "img.gguf",
+                Type = (int)AIModelTypes.ImageGeneration
+            };
+
+            var proto = dbModel.ConvertToProto();
+
+            Assert.Equal(AIModelTypes.ImageGeneration, proto.Type);
+        }
+
+        [Fact]
+        public void ConvertToDb_Type_MapsCorrectly()
+        {
+            var proto = new AIModel
+            {
+                Name = "Image Model",
+                FileName = "img.gguf",
+                Type = AIModelTypes.ImageGeneration
+            };
+
+            var db = proto.ConvertToDb();
+
+            Assert.Equal((int)AIModelTypes.ImageGeneration, db.Type);
+        }
+
+        [Fact]
+        public void RoundTrip_Type_IsPreserved()
+        {
+            var original = new AIModel
+            {
+                Name = "Type Test",
+                FileName = "test.gguf",
+                Type = AIModelTypes.SpeechToText
+            };
+
+            var db = original.ConvertToDb();
+            var roundTripped = db.ConvertToProto();
+
+            Assert.Equal(AIModelTypes.SpeechToText, roundTripped.Type);
+        }
+
+        [Fact]
+        public void ConvertToProto_MultipleTypes_MapsCorrectly()
+        {
+            var dbModel = new DaisiModel
+            {
+                Name = "Multi-Type Model",
+                FileName = "vision.gguf",
+                Types = new List<int>
+                {
+                    (int)AIModelTypes.TextGeneration,
+                    (int)AIModelTypes.ImageGeneration
+                }
+            };
+
+            var proto = dbModel.ConvertToProto();
+
+            Assert.Equal(2, proto.Types_.Count);
+            Assert.Contains(AIModelTypes.TextGeneration, proto.Types_);
+            Assert.Contains(AIModelTypes.ImageGeneration, proto.Types_);
+            // Backward compat: Type should be set to first type
+            Assert.Equal(AIModelTypes.TextGeneration, proto.Type);
+        }
+
+        [Fact]
+        public void ConvertToDb_MultipleTypes_MapsCorrectly()
+        {
+            var proto = new AIModel
+            {
+                Name = "Multi-Type",
+                FileName = "multi.gguf",
+                Type = AIModelTypes.TextGeneration
+            };
+            proto.Types_.Add(AIModelTypes.TextGeneration);
+            proto.Types_.Add(AIModelTypes.ImageGeneration);
+
+            var db = proto.ConvertToDb();
+
+            Assert.Equal(2, db.Types.Count);
+            Assert.Contains((int)AIModelTypes.TextGeneration, db.Types);
+            Assert.Contains((int)AIModelTypes.ImageGeneration, db.Types);
+        }
+
+        [Fact]
+        public void ConvertToDb_EmptyTypes_PopulatesFromType()
+        {
+            var proto = new AIModel
+            {
+                Name = "Single Type",
+                FileName = "single.gguf",
+                Type = AIModelTypes.AudioGeneration
+            };
+            // Types_ is empty
+
+            var db = proto.ConvertToDb();
+
+            // Should auto-populate from Type for backward compat
+            Assert.Single(db.Types);
+            Assert.Equal((int)AIModelTypes.AudioGeneration, db.Types[0]);
+        }
+
+        [Fact]
+        public void RoundTrip_MultipleTypes_Preserved()
+        {
+            var original = new AIModel
+            {
+                Name = "Multi Round Trip",
+                FileName = "multi.gguf",
+                Type = AIModelTypes.TextGeneration
+            };
+            original.Types_.Add(AIModelTypes.TextGeneration);
+            original.Types_.Add(AIModelTypes.SpeechToText);
+
+            var db = original.ConvertToDb();
+            var roundTripped = db.ConvertToProto();
+
+            Assert.Equal(2, roundTripped.Types_.Count);
+            Assert.Contains(AIModelTypes.TextGeneration, roundTripped.Types_);
+            Assert.Contains(AIModelTypes.SpeechToText, roundTripped.Types_);
+            Assert.Equal(AIModelTypes.TextGeneration, roundTripped.Type);
+        }
+
+        [Fact]
+        public void ConvertToProto_BackendEngine_MapsCorrectly()
+        {
+            var dbModel = new DaisiModel
+            {
+                Name = "ONNX Model",
+                FileName = "model.onnx",
+                Backend = new DaisiModelBackendSettings
+                {
+                    BackendEngine = "OnnxRuntimeGenAI"
+                }
+            };
+
+            var proto = dbModel.ConvertToProto();
+
+            Assert.Equal("OnnxRuntimeGenAI", proto.Backend.BackendEngine);
+        }
+
+        [Fact]
+        public void ConvertToDb_BackendEngine_MapsCorrectly()
+        {
+            var proto = new AIModel
+            {
+                Name = "ONNX Model",
+                FileName = "model.onnx",
+                Backend = new BackendSettings
+                {
+                    BackendEngine = "OnnxRuntimeGenAI"
+                }
+            };
+
+            var db = proto.ConvertToDb();
+
+            Assert.Equal("OnnxRuntimeGenAI", db.Backend!.BackendEngine);
+        }
+
+        [Fact]
+        public void ConvertToDb_EmptyBackendEngine_StoresNull()
+        {
+            var proto = new AIModel
+            {
+                Name = "Default Model",
+                FileName = "model.gguf",
+                Backend = new BackendSettings
+                {
+                    BackendEngine = ""
+                }
+            };
+
+            var db = proto.ConvertToDb();
+
+            Assert.Null(db.Backend!.BackendEngine);
+        }
+
+        [Fact]
+        public void ConvertToProto_InferenceDefaults_MapsWhenSet()
+        {
+            var dbModel = new DaisiModel
+            {
+                Name = "Tuned Model",
+                FileName = "tuned.gguf",
+                Backend = new DaisiModelBackendSettings
+                {
+                    Temperature = 0.5f,
+                    TopP = 0.9f,
+                    TopK = 30,
+                    RepeatPenalty = 1.2f,
+                    PresencePenalty = 0.1f
+                }
+            };
+
+            var proto = dbModel.ConvertToProto();
+
+            Assert.True(proto.Backend.HasTemperature);
+            Assert.Equal(0.5f, proto.Backend.Temperature);
+            Assert.True(proto.Backend.HasTopP);
+            Assert.Equal(0.9f, proto.Backend.TopP);
+            Assert.True(proto.Backend.HasTopK);
+            Assert.Equal(30, proto.Backend.TopK);
+            Assert.True(proto.Backend.HasRepeatPenalty);
+            Assert.Equal(1.2f, proto.Backend.RepeatPenalty);
+            Assert.True(proto.Backend.HasPresencePenalty);
+            Assert.Equal(0.1f, proto.Backend.PresencePenalty);
+        }
+
+        [Fact]
+        public void ConvertToProto_InferenceDefaults_OmittedWhenNull()
+        {
+            var dbModel = new DaisiModel
+            {
+                Name = "Default Model",
+                FileName = "default.gguf",
+                Backend = new DaisiModelBackendSettings
+                {
+                    Temperature = null,
+                    TopP = null,
+                    TopK = null,
+                    RepeatPenalty = null,
+                    PresencePenalty = null
+                }
+            };
+
+            var proto = dbModel.ConvertToProto();
+
+            Assert.False(proto.Backend.HasTemperature);
+            Assert.False(proto.Backend.HasTopP);
+            Assert.False(proto.Backend.HasTopK);
+            Assert.False(proto.Backend.HasRepeatPenalty);
+            Assert.False(proto.Backend.HasPresencePenalty);
+        }
+
+        [Fact]
+        public void ConvertToDb_InferenceDefaults_MapsFromProto()
+        {
+            var proto = new AIModel
+            {
+                Name = "Tuned",
+                FileName = "tuned.gguf",
+                Backend = new BackendSettings()
+            };
+            proto.Backend.Temperature = 0.7f;
+            proto.Backend.TopK = 50;
+
+            var db = proto.ConvertToDb();
+
+            Assert.Equal(0.7f, db.Backend!.Temperature);
+            Assert.Equal(50, db.Backend.TopK);
+            Assert.Null(db.Backend.TopP);
+            Assert.Null(db.Backend.RepeatPenalty);
+            Assert.Null(db.Backend.PresencePenalty);
+        }
+
+        [Fact]
+        public void RoundTrip_InferenceDefaults_Preserved()
+        {
+            var original = new AIModel
+            {
+                Name = "Param Round Trip",
+                FileName = "params.gguf",
+                Backend = new BackendSettings
+                {
+                    BackendEngine = "LlamaSharp"
+                }
+            };
+            original.Backend.Temperature = 0.6f;
+            original.Backend.TopP = 0.85f;
+            original.Backend.RepeatPenalty = 1.3f;
+
+            var db = original.ConvertToDb();
+            var roundTripped = db.ConvertToProto();
+
+            Assert.Equal("LlamaSharp", roundTripped.Backend.BackendEngine);
+            Assert.True(roundTripped.Backend.HasTemperature);
+            Assert.Equal(0.6f, roundTripped.Backend.Temperature);
+            Assert.True(roundTripped.Backend.HasTopP);
+            Assert.Equal(0.85f, roundTripped.Backend.TopP);
+            Assert.True(roundTripped.Backend.HasRepeatPenalty);
+            Assert.Equal(1.3f, roundTripped.Backend.RepeatPenalty);
+            Assert.False(roundTripped.Backend.HasTopK);
+            Assert.False(roundTripped.Backend.HasPresencePenalty);
+        }
+
         #endregion
 
         #region Usage Stats Timeframe Mapping

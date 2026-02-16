@@ -98,6 +98,21 @@ The ORC manages the secure tool lifecycle — install/uninstall notifications an
 
 **Provider API contract:** Providers implement four HTTP POST endpoints (`/install`, `/uninstall`, `/configure`, `/execute`) documented in the [Secure Tool API Reference](https://daisi.ai/learn/marketplace/secure-tool-api-reference).
 
+### Per-Model Backend Engine & Inference Parameters
+
+The ORC stores per-model configuration in CosmosDB and serves it to hosts and the Manager UI via gRPC.
+
+**Backend Engine:** Each model can specify a `BackendEngine` in its `BackendSettings` (e.g. `"LlamaSharp"`, `"OnnxRuntimeGenAI"`). This tells the host which inference backend to use when loading the model. The Manager admin dialog auto-sets this based on the selected file type (GGUF → LlamaSharp, ONNX → OnnxRuntimeGenAI).
+
+**Inference Parameter Defaults:** Models can override default inference parameters (`Temperature`, `TopP`, `TopK`, `RepeatPenalty`, `PresencePenalty`) at the model level. These are stored as optional fields in `BackendSettings` and applied by the host when the request doesn't explicitly set them:
+- Per-request values (highest priority)
+- Per-model defaults (from `BackendSettings`)
+- Hardcoded defaults in `TextGenerationParams` (lowest priority)
+
+**Multi-Type Support:** Models support multiple types via the `Types` repeated field (e.g. a vision-language model can be both `TextGeneration` and `ImageGeneration`). The `Type` singular field is maintained for backward compatibility with older hosts and is set to the first type in `Types`.
+
+**HuggingFace ONNX Detection:** The `HuggingFaceService` now queries the HuggingFace API with `expand[]=onnx` and parses `.onnx` files from the siblings list, returning them in a separate `ONNXFiles` collection alongside GGUF files.
+
 ### Project - Daisi.Orc.Core
 This is the core library that contains various interfaces and a CosmoDb repository, which is used by default. Abstraction for other databases and repository types is planned, but not yet implemented.
 

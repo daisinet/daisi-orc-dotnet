@@ -15,7 +15,7 @@ namespace Daisi.Orc.Core.Services
             try
             {
                 var client = httpClientFactory.CreateClient();
-                var apiUrl = $"https://huggingface.co/api/models/{repoId}?blobs=true&expand[]=gguf";
+                var apiUrl = $"https://huggingface.co/api/models/{repoId}?blobs=true&expand[]=gguf&expand[]=onnx";
                 var response = await client.GetAsync(apiUrl);
 
                 if (!response.IsSuccessStatusCode)
@@ -56,7 +56,7 @@ namespace Daisi.Orc.Core.Services
                         info.ContextLength = (uint)ctx.GetInt64();
                 }
 
-                // Parse siblings for GGUF files
+                // Parse siblings for GGUF and ONNX files
                 if (root.TryGetProperty("siblings", out var siblings) && siblings.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var sibling in siblings.EnumerateArray())
@@ -65,8 +65,6 @@ namespace Daisi.Orc.Core.Services
                             continue;
 
                         var filename = rfilename.GetString() ?? "";
-                        if (!filename.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase))
-                            continue;
 
                         long size = 0;
                         if (sibling.TryGetProperty("size", out var sizeEl))
@@ -74,15 +72,27 @@ namespace Daisi.Orc.Core.Services
                         else if (sibling.TryGetProperty("lfs", out var lfs) && lfs.TryGetProperty("size", out var lfsSize))
                             size = lfsSize.GetInt64();
 
-                        var quantType = ParseQuantType(filename);
-
-                        info.GGUFFiles.Add(new HuggingFaceGGUFFileData
+                        if (filename.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase))
                         {
-                            FileName = filename,
-                            QuantType = quantType,
-                            SizeBytes = size,
-                            DownloadUrl = $"https://huggingface.co/{repoId}/resolve/main/{filename}?download=true"
-                        });
+                            var quantType = ParseQuantType(filename);
+
+                            info.GGUFFiles.Add(new HuggingFaceGGUFFileData
+                            {
+                                FileName = filename,
+                                QuantType = quantType,
+                                SizeBytes = size,
+                                DownloadUrl = $"https://huggingface.co/{repoId}/resolve/main/{filename}?download=true"
+                            });
+                        }
+                        else if (filename.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase))
+                        {
+                            info.ONNXFiles.Add(new HuggingFaceONNXFileData
+                            {
+                                FileName = filename,
+                                SizeBytes = size,
+                                DownloadUrl = $"https://huggingface.co/{repoId}/resolve/main/{filename}?download=true"
+                            });
+                        }
                     }
                 }
 
@@ -149,12 +159,20 @@ namespace Daisi.Orc.Core.Services
         public string Architecture { get; set; } = "";
         public uint ContextLength { get; set; }
         public List<HuggingFaceGGUFFileData> GGUFFiles { get; set; } = new();
+        public List<HuggingFaceONNXFileData> ONNXFiles { get; set; } = new();
     }
 
     public class HuggingFaceGGUFFileData
     {
         public string FileName { get; set; } = "";
         public string QuantType { get; set; } = "";
+        public long SizeBytes { get; set; }
+        public string DownloadUrl { get; set; } = "";
+    }
+
+    public class HuggingFaceONNXFileData
+    {
+        public string FileName { get; set; } = "";
         public long SizeBytes { get; set; }
         public string DownloadUrl { get; set; } = "";
     }

@@ -17,6 +17,7 @@ namespace Daisi.Orc.Core.Data.Models
         public bool HasReasoning { get; set; }
         public List<int> ThinkLevels { get; set; } = new();
         public int Type { get; set; }
+        public List<int> Types { get; set; } = new();
 
         /// <summary>
         /// Backend-specific settings. Uses JsonPropertyName("lLama") for lazy CosmosDB migration
@@ -40,5 +41,11 @@ namespace Daisi.Orc.Core.Data.Models
         public bool SkipCheck { get; set; }
         public string? LlamaPath { get; set; }
         public string? LlavaPath { get; set; }
+        public string? BackendEngine { get; set; }
+        public float? Temperature { get; set; }
+        public float? TopP { get; set; }
+        public int? TopK { get; set; }
+        public float? RepeatPenalty { get; set; }
+        public float? PresencePenalty { get; set; }
     }
 }
