@@ -36,6 +36,8 @@ public partial class Program
         builder.Services.AddScoped<OrcService>();
         builder.Services.AddScoped<CreditService>();
         builder.Services.AddScoped<MarketplaceService>();
+        builder.Services.AddScoped<SecureToolService>();
+        builder.Services.AddHttpClient();
         builder.Services.AddSingleton<GitHubReleaseService>();
         builder.Services.AddHttpClient();
         builder.Services.AddSingleton<HuggingFaceService>();
@@ -78,6 +80,7 @@ public partial class Program
         app.MapGrpcService<ReleasesRPC>();
         app.MapGrpcService<SkillsRPC>();
         app.MapGrpcService<MarketplaceRPC>();
+        app.MapGrpcService<SecureToolRPC>();
 
 #if DEBUG
         builder.Logging.AddDebug();

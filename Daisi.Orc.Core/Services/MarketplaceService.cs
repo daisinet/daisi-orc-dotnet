@@ -5,7 +5,7 @@ using Daisi.Protos.V1;
 
 namespace Daisi.Orc.Core.Services;
 
-public class MarketplaceService(Cosmo cosmo, CreditService creditService)
+public class MarketplaceService(Cosmo cosmo, CreditService creditService, SecureToolService secureToolService)
 {
     /// <summary>
     /// Purchase a marketplace item. Handles Free, OneTimePurchase, and Subscription pricing.
@@ -77,7 +77,19 @@ public class MarketplaceService(Cosmo cosmo, CreditService creditService)
                 break;
         }
 
+        // If this is a secure tool, generate InstallId and notify provider
+        if (item.IsSecureExecution)
+        {
+            purchase.SecureInstallId = Cosmo.GenerateId("inst");
+        }
+
         purchase = await cosmo.CreatePurchaseAsync(purchase);
+
+        // Notify provider after purchase is persisted (best-effort)
+        if (item.IsSecureExecution && !string.IsNullOrEmpty(purchase.SecureInstallId))
+        {
+            await secureToolService.NotifyProviderInstallAsync(item, purchase.SecureInstallId);
+        }
 
         // Increment purchase count
         item.PurchaseCount++;
@@ -150,6 +162,8 @@ public class MarketplaceService(Cosmo cosmo, CreditService creditService)
                 // Insufficient credits — deactivate subscription
                 sub.IsActive = false;
                 await cosmo.UpdatePurchaseAsync(sub);
+                if (item.IsSecureExecution && !string.IsNullOrEmpty(sub.SecureInstallId))
+                    await secureToolService.NotifyProviderUninstallAsync(item, sub.SecureInstallId);
                 continue;
             }
 

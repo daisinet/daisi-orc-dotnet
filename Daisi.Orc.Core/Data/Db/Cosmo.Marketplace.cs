@@ -151,6 +151,26 @@ public partial class Cosmo
         return 0;
     }
 
+    /// <summary>
+    /// Returns all approved, public, free marketplace items that have secure execution enabled.
+    /// Used to discover free secure tools available to all accounts.
+    /// </summary>
+    public async Task<List<MarketplaceItem>> GetApprovedFreeSecureToolsAsync()
+    {
+        var container = await GetContainerAsync(MarketplaceContainerName);
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.Status = 'Approved' AND c.IsSecureExecution = true AND c.PricingModel = 'MarketplacePricingFree' AND c.Visibility = 'Public'");
+
+        var items = new List<MarketplaceItem>();
+        using var resultSet = container.GetItemQueryIterator<MarketplaceItem>(query);
+        while (resultSet.HasMoreResults)
+        {
+            var response = await resultSet.ReadNextAsync();
+            items.AddRange(response);
+        }
+        return items;
+    }
+
     public async Task ClearFeaturedItemsByAccountAsync(string accountId)
     {
         var container = await GetContainerAsync(MarketplaceContainerName);

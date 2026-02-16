@@ -29,4 +29,10 @@ public class MarketplacePurchase
     public bool IsActive { get; set; } = true;
 
     public DateTime PurchasedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Opaque identifier shared with the provider for this installation.
+    /// Generated on purchase for secure execution tools. Never contains AccountId.
+    /// </summary>
+    public string? SecureInstallId { get; set; }
 }
