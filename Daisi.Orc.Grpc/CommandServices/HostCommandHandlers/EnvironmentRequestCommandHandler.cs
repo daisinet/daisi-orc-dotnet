@@ -26,12 +26,11 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
 
         public static async Task HandleHostUpdaterCheckAsync(ChannelWriter<Command> responseQueue, Core.Data.Models.Host host, Cosmo cosmo, ILogger logger)
         {
-            var isDesktop = host.OperatingSystem == "Windows"
-                         || host.OperatingSystem == "MacCatalyst"
-                         || host.OperatingSystem == "MacOS"
-                         || host.OperatingSystem == "Linux";
-
-            if (!isDesktop)
+            // Only skip update check for known non-desktop platforms.
+            // If OperatingSystem is null/empty (e.g. DB record not yet populated), assume desktop
+            // since only desktop hosts connect via the command channel.
+            var isMobile = host.OperatingSystem == "Android" || host.OperatingSystem == "IOS";
+            if (isMobile)
                 return;
 
             // Always start with the production release as the baseline for all hosts.
