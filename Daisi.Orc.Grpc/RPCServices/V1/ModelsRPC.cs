@@ -109,6 +109,16 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                     });
                 }
 
+                foreach (var file in result.Model.ONNXFiles)
+                {
+                    info.ONNXFiles.Add(new HuggingFaceONNXFile
+                    {
+                        FileName = file.FileName,
+                        SizeBytes = file.SizeBytes,
+                        DownloadUrl = file.DownloadUrl
+                    });
+                }
+
                 response.Model = info;
             }
 
@@ -195,13 +205,23 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                     IsDefault = model.IsDefault,
                     Enabled = model.Enabled,
                     LoadAtStartup = model.LoadAtStartup,
-                    HasReasoning = model.HasReasoning
+                    HasReasoning = model.HasReasoning,
+                    Type = (AIModelTypes)model.Type
                 };
 
                 foreach (var level in model.ThinkLevels)
                 {
                     proto.ThinkLevels.Add((ThinkLevels)level);
                 }
+
+                foreach (var type in model.Types)
+                {
+                    proto.Types_.Add((AIModelTypes)type);
+                }
+
+                // Backward compat: if Types is populated, set Type to the primary (first) type
+                if (proto.Types_.Count > 0)
+                    proto.Type = proto.Types_[0];
 
                 if (model.Backend != null)
                 {
@@ -215,8 +235,20 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                         AutoFallback = model.Backend.AutoFallback,
                         SkipCheck = model.Backend.SkipCheck,
                         LlamaPath = model.Backend.LlamaPath ?? string.Empty,
-                        LlavaPath = model.Backend.LlavaPath ?? string.Empty
+                        LlavaPath = model.Backend.LlavaPath ?? string.Empty,
+                        BackendEngine = model.Backend.BackendEngine ?? string.Empty
                     };
+
+                    if (model.Backend.Temperature.HasValue)
+                        proto.Backend.Temperature = model.Backend.Temperature.Value;
+                    if (model.Backend.TopP.HasValue)
+                        proto.Backend.TopP = model.Backend.TopP.Value;
+                    if (model.Backend.TopK.HasValue)
+                        proto.Backend.TopK = model.Backend.TopK.Value;
+                    if (model.Backend.RepeatPenalty.HasValue)
+                        proto.Backend.RepeatPenalty = model.Backend.RepeatPenalty.Value;
+                    if (model.Backend.PresencePenalty.HasValue)
+                        proto.Backend.PresencePenalty = model.Backend.PresencePenalty.Value;
                 }
 
                 return proto;
@@ -238,8 +270,14 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                     Enabled = proto.Enabled,
                     LoadAtStartup = proto.LoadAtStartup,
                     HasReasoning = proto.HasReasoning,
-                    ThinkLevels = proto.ThinkLevels.Select(t => (int)t).ToList()
+                    ThinkLevels = proto.ThinkLevels.Select(t => (int)t).ToList(),
+                    Type = (int)proto.Type,
+                    Types = proto.Types_.Select(t => (int)t).ToList()
                 };
+
+                // Backward compat: if Types is empty but Type is set, populate Types from Type
+                if (model.Types.Count == 0)
+                    model.Types.Add(model.Type);
 
                 if (proto.Backend != null)
                 {
@@ -253,7 +291,13 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                         AutoFallback = proto.Backend.AutoFallback,
                         SkipCheck = proto.Backend.SkipCheck,
                         LlamaPath = proto.Backend.LlamaPath,
-                        LlavaPath = proto.Backend.LlavaPath
+                        LlavaPath = proto.Backend.LlavaPath,
+                        BackendEngine = string.IsNullOrWhiteSpace(proto.Backend.BackendEngine) ? null : proto.Backend.BackendEngine,
+                        Temperature = proto.Backend.HasTemperature ? proto.Backend.Temperature : null,
+                        TopP = proto.Backend.HasTopP ? proto.Backend.TopP : null,
+                        TopK = proto.Backend.HasTopK ? proto.Backend.TopK : null,
+                        RepeatPenalty = proto.Backend.HasRepeatPenalty ? proto.Backend.RepeatPenalty : null,
+                        PresencePenalty = proto.Backend.HasPresencePenalty ? proto.Backend.PresencePenalty : null
                     };
                 }
 

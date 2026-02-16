@@ -258,6 +258,92 @@ namespace Daisi.Orc.Tests.Services
             Assert.Single(result.Model.GGUFFiles);
         }
 
+        [Fact]
+        public async Task LookupModelAsync_ValidResponse_DetectsONNXFiles()
+        {
+            var json = """
+            {
+                "pipeline_tag": "text-generation",
+                "downloads": 100,
+                "likes": 10,
+                "tags": ["onnx"],
+                "siblings": [
+                    { "rfilename": "model.onnx", "size": 5000000000 },
+                    { "rfilename": "onnx/model.onnx", "size": 3000000000 },
+                    { "rfilename": "model-Q4_K_M.gguf", "size": 4200000000 },
+                    { "rfilename": "README.md", "size": 1024 }
+                ]
+            }
+            """;
+
+            var handler = new FakeHttpMessageHandler(System.Net.HttpStatusCode.OK, json);
+            var httpClientFactory = new TestHttpClientFactory(handler);
+            var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<HuggingFaceService>.Instance;
+            var service = new HuggingFaceService(httpClientFactory, logger);
+
+            var result = await service.LookupModelAsync("https://huggingface.co/owner/onnx-repo");
+
+            Assert.True(result.Success);
+            Assert.Equal(1, result.Model!.GGUFFiles.Count);
+            Assert.Equal(2, result.Model.ONNXFiles.Count);
+            Assert.All(result.Model.ONNXFiles, f => Assert.EndsWith(".onnx", f.FileName));
+        }
+
+        [Fact]
+        public async Task LookupModelAsync_ONNXFiles_BuildsCorrectDownloadUrls()
+        {
+            var json = """
+            {
+                "pipeline_tag": "text-generation",
+                "downloads": 100,
+                "likes": 10,
+                "tags": [],
+                "siblings": [
+                    { "rfilename": "onnx/model.onnx", "size": 3000000000 }
+                ]
+            }
+            """;
+
+            var handler = new FakeHttpMessageHandler(System.Net.HttpStatusCode.OK, json);
+            var httpClientFactory = new TestHttpClientFactory(handler);
+            var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<HuggingFaceService>.Instance;
+            var service = new HuggingFaceService(httpClientFactory, logger);
+
+            var result = await service.LookupModelAsync("https://huggingface.co/owner/repo");
+
+            var onnxFile = result.Model!.ONNXFiles[0];
+            Assert.Equal("onnx/model.onnx", onnxFile.FileName);
+            Assert.Equal(3000000000, onnxFile.SizeBytes);
+            Assert.Equal("https://huggingface.co/owner/repo/resolve/main/onnx/model.onnx?download=true", onnxFile.DownloadUrl);
+        }
+
+        [Fact]
+        public async Task LookupModelAsync_NoONNXFiles_ReturnsEmptyList()
+        {
+            var json = """
+            {
+                "pipeline_tag": "text-generation",
+                "downloads": 100,
+                "likes": 10,
+                "tags": [],
+                "siblings": [
+                    { "rfilename": "model-Q4_K_M.gguf", "size": 4200000000 },
+                    { "rfilename": "config.json", "size": 512 }
+                ]
+            }
+            """;
+
+            var handler = new FakeHttpMessageHandler(System.Net.HttpStatusCode.OK, json);
+            var httpClientFactory = new TestHttpClientFactory(handler);
+            var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<HuggingFaceService>.Instance;
+            var service = new HuggingFaceService(httpClientFactory, logger);
+
+            var result = await service.LookupModelAsync("https://huggingface.co/owner/repo");
+
+            Assert.True(result.Success);
+            Assert.Empty(result.Model!.ONNXFiles);
+        }
+
         #endregion
     }
 
