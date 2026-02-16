@@ -103,7 +103,8 @@ public partial class Cosmo
             var response = await resultSet.ReadNextAsync();
             items.AddRange(response);
         }
-        return items;
+        // Sort featured items first, then by download count (Cosmos composite indexes not available)
+        return items.OrderByDescending(i => i.IsFeatured).ThenByDescending(i => i.DownloadCount).ToList();
     }
 
     public async Task UpdateMarketplaceItemAsync(MarketplaceItem item)
@@ -132,5 +133,63 @@ public partial class Cosmo
             items.AddRange(response);
         }
         return items;
+    }
+
+    public async Task<int> GetFeaturedItemCountByAccountAsync(string accountId)
+    {
+        var container = await GetContainerAsync(MarketplaceContainerName);
+        var query = new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.AccountId = @id AND c.IsFeatured = true")
+            .WithParameter("@id", accountId);
+
+        using var resultSet = container.GetItemQueryIterator<int>(query);
+        while (resultSet.HasMoreResults)
+        {
+            var response = await resultSet.ReadNextAsync();
+            if (response.Any())
+                return response.First();
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// Returns all approved, public, free marketplace items that have secure execution enabled.
+    /// Used to discover free secure tools available to all accounts.
+    /// </summary>
+    public async Task<List<MarketplaceItem>> GetApprovedFreeSecureToolsAsync()
+    {
+        var container = await GetContainerAsync(MarketplaceContainerName);
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.Status = 'Approved' AND c.IsSecureExecution = true AND c.PricingModel = 'MarketplacePricingFree' AND c.Visibility = 'Public'");
+
+        var items = new List<MarketplaceItem>();
+        using var resultSet = container.GetItemQueryIterator<MarketplaceItem>(query);
+        while (resultSet.HasMoreResults)
+        {
+            var response = await resultSet.ReadNextAsync();
+            items.AddRange(response);
+        }
+        return items;
+    }
+
+    public async Task ClearFeaturedItemsByAccountAsync(string accountId)
+    {
+        var container = await GetContainerAsync(MarketplaceContainerName);
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.AccountId = @id AND c.IsFeatured = true")
+            .WithParameter("@id", accountId);
+
+        var items = new List<MarketplaceItem>();
+        using var resultSet = container.GetItemQueryIterator<MarketplaceItem>(query);
+        while (resultSet.HasMoreResults)
+        {
+            var response = await resultSet.ReadNextAsync();
+            items.AddRange(response);
+        }
+
+        foreach (var item in items)
+        {
+            item.IsFeatured = false;
+            item.UpdatedAt = DateTime.UtcNow;
+            await container.UpsertItemAsync(item, new PartitionKey(item.AccountId));
+        }
     }
 }

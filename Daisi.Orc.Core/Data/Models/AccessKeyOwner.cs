@@ -12,5 +12,7 @@ namespace Daisi.Orc.Core.Data.Models
         public string Name { get; set; }
         public SystemRoles SystemRole { get; set; }
         public string AccountId { get; set; }
+        public bool AllowedToLogin { get; set; } = true;
+        public UserRoles? Role { get; set; }
     }
 }

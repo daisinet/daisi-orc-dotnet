@@ -47,6 +47,14 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
 
             if (host == null) throw new Exception("DAISI: Invalid host.");
 
+            // Use stored SecretKeyId for a point read instead of cross-partition query
+            if (!string.IsNullOrEmpty(host.SecretKeyId))
+            {
+                var key = await cosmo.GetKeyAsync(host.SecretKeyId, KeyTypes.Secret);
+                if (key != null) return new GetSecretKeyResponse() { SecretKey = key.Key };
+            }
+
+            // Fallback for hosts registered before SecretKeyId was stored
             var keys = await cosmo.GetKeysByOwnerIdAsync(request.HostId);
             var secretKey = keys.FirstOrDefault(k => k.Type == KeyTypes.Secret.Name);
 
@@ -67,6 +75,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 host.Name = request.Host.Name;
                 host.DirectConnect = request.Host.DirectConnect;
                 host.PeerConnect = request.Host.PeerConnect;
+                host.ToolsOnly = request.Host.ToolsOnly;
                 host.ReleaseGroup = request.Host.ReleaseGroup ?? host.ReleaseGroup;
 
                 await HostContainer.UpdateConfigurableWebSettingsAsync(host);
@@ -106,6 +115,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 Region = host.Region.ToString(),
                 DirectConnect = host.DirectConnect,
                 PeerConnect = host.PeerConnect,
+                ToolsOnly = host.ToolsOnly,
                 Status = host.Status,
                 ReleaseGroup = host.ReleaseGroup,
             }));
@@ -227,7 +237,8 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 OperatingSystem = request.Host.OperatingSystem,
                 OperatingSystemVersion = request.Host.OperatingSystemVersion,
                 DirectConnect = request.Host.DirectConnect,
-                PeerConnect = request.Host.PeerConnect
+                PeerConnect = request.Host.PeerConnect,
+                ToolsOnly = request.Host.ToolsOnly
             };
 
             host = await cosmo.CreateHostAsync(host);
@@ -239,6 +250,10 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 Name = request.Host.Name,
                 SystemRole = SystemRoles.HostDevice
             });
+
+            // Store the secret key ID on the host for efficient lookups
+            host.SecretKeyId = secretKey.Id;
+            await cosmo.PatchHostSecretKeyIdAsync(host.Id, host.AccountId, secretKey.Id);
 
             response.SecretKey = secretKey.Key;
             response.HostId = host.Id;

@@ -95,15 +95,12 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
 
             if (response.key is not null && response.response.IsValid && response.key.Owner.SystemRole == SystemRoles.User)
             {
-                var user = await cosmo.GetUserAsync(response.key.Owner.Id, response.key.Owner.AccountId);
-                if (user is not null)
-                {
-                    response.response.UserId = user.Id;
-                    response.response.UserName = user.Name;
-                    response.response.UserRole = user.Role;
-                    response.response.UserAccountId = user.AccountId;
-                    logger.LogInformation($"ValidateClientKey: User={user.Name}, Role={user.Role} ({(int)user.Role})");
-                }
+                var owner = response.key.Owner;
+                response.response.UserId = owner.Id;
+                response.response.UserName = owner.Name;
+                response.response.UserRole = owner.Role ?? UserRoles.Reader;
+                response.response.UserAccountId = owner.AccountId;
+                logger.LogInformation($"ValidateClientKey: User={owner.Name}, Role={owner.Role} ({(int)(owner.Role ?? UserRoles.Reader)})");
             }
 
             return response.response;
@@ -227,7 +224,9 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                         Id = user.Id,
                         Name = user.Name,
                         AccountId = user.AccountId,
-                        SystemRole = SystemRoles.User
+                        SystemRole = SystemRoles.User,
+                        AllowedToLogin = user.AllowedToLogin,
+                        Role = user.Role
                     });
 
                 if (appClientKey is null)
@@ -246,6 +245,8 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
 
                 if (appClientKey.DateExpires.HasValue)
                     response.KeyExpiration = Timestamp.FromDateTime(appClientKey.DateExpires.Value);
+
+                TrackBotInstall(request, user);
 
                 return response;
 
@@ -269,7 +270,9 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                                                 Id = user.Id,
                                                 Name = user.Name,
                                                 AccountId = user.AccountId,
-                                                SystemRole = SystemRoles.User
+                                                SystemRole = SystemRoles.User,
+                                                AllowedToLogin = user.AllowedToLogin,
+                                                Role = user.Role
                                             },
                                             new() { secretKey.Owner.Id });
 
@@ -282,6 +285,8 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 if (clientKey.DateExpires.HasValue)
                     response.KeyExpiration = Timestamp.FromDateTime(clientKey.DateExpires.Value);
 
+                TrackBotInstall(request, user);
+
                 response.Success = true;
                 return response;
             }
@@ -291,9 +296,31 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             response.ErrorMessage = "Unknown error occurred while validating auth code.";
             response.Success = false;
             return response;
+        }
 
+        private void TrackBotInstall(ValidateAuthCodeRequest request, Core.Data.Models.User user)
+        {
+            if (string.IsNullOrWhiteSpace(request.BotVersion))
+                return;
 
-
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await cosmo.CreateOrUpdateBotInstallAsync(new Core.Data.Models.BotInstall
+                    {
+                        UserId = user.Id,
+                        UserName = user.Name,
+                        AccountId = user.AccountId,
+                        Version = request.BotVersion,
+                        Platform = request.BotPlatform ?? "unknown"
+                    });
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to track bot install for user {UserId}", user.Id);
+                }
+            });
         }
     }
 }

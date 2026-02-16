@@ -16,12 +16,20 @@ namespace Daisi.Orc.Core.Data.Models
         public bool LoadAtStartup { get; set; }
         public bool HasReasoning { get; set; }
         public List<int> ThinkLevels { get; set; } = new();
-        public DaisiModelLLamaSettings? LLama { get; set; }
+        public int Type { get; set; }
+
+        /// <summary>
+        /// Backend-specific settings. Uses JsonPropertyName("lLama") for lazy CosmosDB migration
+        /// so existing documents with "lLama" field name are deserialized correctly.
+        /// </summary>
+        [JsonPropertyName("lLama")]
+        public DaisiModelBackendSettings? Backend { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 
-    public class DaisiModelLLamaSettings
+    public class DaisiModelBackendSettings
     {
         public int Runtime { get; set; }
         public uint ContextSize { get; set; }

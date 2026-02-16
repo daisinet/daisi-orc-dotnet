@@ -73,10 +73,8 @@ namespace Daisi.Orc.Tests.Services
         [Fact]
         public async Task EarnTokenCredits_WithHighUptime_AppliesUptimeBonus()
         {
-            _cosmo.SeedAccount("acct-1", balance: 0);
-            // Seed 99%+ uptime (Gold tier = 1.5x)
-            int nearFullMonthMinutes = (int)(30 * 24 * 60 * 0.995); // 99.5%
-            _cosmo.SeedUptimePeriods("acct-1", "host-1", nearFullMonthMinutes);
+            // Seed account with Gold tier cached (the tier is now cached, not recalculated per call)
+            _cosmo.SeedAccount("acct-1", balance: 0, cachedBonusTier: UptimeBonusTier.Gold);
 
             var tx = await _service.EarnTokenCreditsAsync("acct-1", 100);
 

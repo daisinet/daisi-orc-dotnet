@@ -15,7 +15,7 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
     /// <summary>
     /// Handles the commands received from Host to log the heartbeat.
     /// </summary>
-    public class HeartbeatRequestCommandHandler(Cosmo cosmo, OrcService orcService, ILogger<HeartbeatRequestCommandHandler> logger, IConfiguration configuration) : OrcCommandHandlerBase
+    public class HeartbeatRequestCommandHandler(Cosmo cosmo, OrcService orcService, ILogger<HeartbeatRequestCommandHandler> logger) : OrcCommandHandlerBase
     {
         public override async Task HandleAsync(string hostId, Command command, ChannelWriter<Command> responseQueue, CancellationToken cancellationToken = default)
         {
@@ -27,6 +27,12 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
             }
 
             var request = command.Payload.Unpack<HeartbeatRequest>();
+
+            // Capture loaded model names from heartbeat settings
+            if (request.Settings?.Model?.Models is { Count: > 0 } models)
+            {
+                hostOnline.LoadedModelNames = models.Select(m => m.Name).Where(n => !string.IsNullOrEmpty(n)).ToList();
+            }
 
             hostOnline.Host.DateLastHeartbeat = DateTime.UtcNow;
             var ip = CallContext.GetRemoteIpAddress() ?? string.Empty;
@@ -41,16 +47,27 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
             hostOnline.Host.ReleaseGroup = dbHost.ReleaseGroup;
             hostOnline.Host.AppVersion = dbHost.AppVersion;
 
-            string clientKey = CallContext.GetClientKey()!;
-            var key = await cosmo.GetKeyAsync(clientKey, KeyTypes.Client);
-            await cosmo.SetKeyTTLAsync(key, 30);
+            // Use cached client key ID from HostOnline to extend TTL with a single patch
+            // instead of GetKeyAsync + full document upsert (saves 1 read + reduces write cost)
+            if (!string.IsNullOrEmpty(hostOnline.ClientKeyId))
+            {
+                await cosmo.PatchKeyExpirationAsync(hostOnline.ClientKeyId, DateTime.UtcNow.AddMinutes(30));
+            }
+            else
+            {
+                // Fallback for connections established before ClientKeyId was cached
+                string clientKey = CallContext.GetClientKey()!;
+                var key = await cosmo.GetKeyAsync(clientKey, KeyTypes.Client);
+                await cosmo.SetKeyTTLAsync(key, 30);
+                hostOnline.ClientKeyId = key.Id;
+            }
 
             responseQueue.TryWrite(new Command()
             {
                 Name = nameof(HeartbeatRequest)                
             });
 
-            await EnvironmentRequestCommandHandler.HandleHostUpdaterCheckAsync(responseQueue, hostOnline.Host, cosmo, configuration, logger);
+            await EnvironmentRequestCommandHandler.HandleHostUpdaterCheckAsync(responseQueue, hostOnline.Host, cosmo, logger);
 
             logger.LogInformation($"Handled Heartbeat for {hostOnline.Host.Name} at {DateTime.UtcNow} from IP {ip}");
         }

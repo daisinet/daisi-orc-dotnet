@@ -5,7 +5,7 @@ using Daisi.Protos.V1;
 
 namespace Daisi.Orc.Core.Services;
 
-public class MarketplaceService(Cosmo cosmo, CreditService creditService)
+public class MarketplaceService(Cosmo cosmo, CreditService creditService, SecureToolService secureToolService)
 {
     /// <summary>
     /// Purchase a marketplace item. Handles Free, OneTimePurchase, and Subscription pricing.
@@ -18,6 +18,14 @@ public class MarketplaceService(Cosmo cosmo, CreditService creditService)
 
         if (item.Status != MarketplaceItemStatus.Approved)
             return (false, "Item is not available for purchase", null);
+
+        // If item is paid, verify seller is still Premium
+        if (item.PricingModel != MarketplacePricingModel.MarketplacePricingFree)
+        {
+            var sellerProfile = await cosmo.GetProviderProfileAsync(item.AccountId);
+            if (sellerProfile is null || !sellerProfile.IsPremium)
+                return (false, "This provider's premium subscription has expired.", null);
+        }
 
         // Check if already purchased (for non-subscription items)
         var existingPurchase = await cosmo.GetPurchaseAsync(buyerAccountId, marketplaceItemId);
@@ -69,7 +77,19 @@ public class MarketplaceService(Cosmo cosmo, CreditService creditService)
                 break;
         }
 
+        // If this is a secure tool, generate InstallId and notify provider
+        if (item.IsSecureExecution)
+        {
+            purchase.SecureInstallId = Cosmo.GenerateId("inst");
+        }
+
         purchase = await cosmo.CreatePurchaseAsync(purchase);
+
+        // Notify provider after purchase is persisted (best-effort)
+        if (item.IsSecureExecution && !string.IsNullOrEmpty(purchase.SecureInstallId))
+        {
+            await secureToolService.NotifyProviderInstallAsync(item, purchase.SecureInstallId);
+        }
 
         // Increment purchase count
         item.PurchaseCount++;
@@ -142,6 +162,8 @@ public class MarketplaceService(Cosmo cosmo, CreditService creditService)
                 // Insufficient credits — deactivate subscription
                 sub.IsActive = false;
                 await cosmo.UpdatePurchaseAsync(sub);
+                if (item.IsSecureExecution && !string.IsNullOrEmpty(sub.SecureInstallId))
+                    await secureToolService.NotifyProviderUninstallAsync(item, sub.SecureInstallId);
                 continue;
             }
 
@@ -154,6 +176,146 @@ public class MarketplaceService(Cosmo cosmo, CreditService creditService)
             // Credit provider share
             await CreditProviderAsync(item, item.SubscriptionCreditPrice);
 
+            renewed++;
+        }
+
+        return renewed;
+    }
+
+    /// <summary>
+    /// Upgrade a provider to Premium tier. Debits credits for the first month.
+    /// </summary>
+    public async Task<(bool Success, string? Error, ProviderProfile? Profile)> UpgradeToPremiumAsync(string accountId)
+    {
+        var profile = await cosmo.GetProviderProfileAsync(accountId);
+        if (profile is null)
+            return (false, "Provider profile not found", null);
+
+        if (profile.Status != ProviderStatus.Approved)
+            return (false, "Only approved providers can upgrade to Premium", null);
+
+        if (profile.IsPremium)
+            return (false, "Provider is already Premium", null);
+
+        // Mark as premium first to prevent race conditions (double-click/concurrent calls)
+        profile.IsPremium = true;
+        profile.PremiumExpiresAt = DateTime.UtcNow.AddDays(30);
+        await cosmo.UpdateProviderProfileAsync(profile);
+
+        var settings = await cosmo.GetMarketplaceSettingsAsync();
+        var transaction = await creditService.SpendPremiumCreditsAsync(accountId, settings.PremiumMonthlyCreditCost);
+        if (transaction is null)
+        {
+            // Roll back premium if payment fails
+            profile.IsPremium = false;
+            profile.PremiumExpiresAt = null;
+            await cosmo.UpdateProviderProfileAsync(profile);
+            return (false, "Insufficient credits", null);
+        }
+
+        profile.PremiumTransactionId = transaction.Id;
+        await cosmo.UpdateProviderProfileAsync(profile);
+
+        return (true, null, profile);
+    }
+
+    /// <summary>
+    /// Cancel a provider's Premium subscription. Issues a 50% prorated refund and clears featured items.
+    /// </summary>
+    public async Task<(ProviderProfile? Profile, long CreditsRefunded)> CancelPremiumAsync(string accountId)
+    {
+        var profile = await cosmo.GetProviderProfileAsync(accountId);
+        if (profile is null)
+            return (null, 0);
+
+        // Calculate prorated refund: 50% of remaining days
+        long refundAmount = 0;
+        if (profile.PremiumExpiresAt.HasValue)
+        {
+            var remaining = (profile.PremiumExpiresAt.Value - DateTime.UtcNow).TotalDays;
+            if (remaining > 0)
+            {
+                var settings = await cosmo.GetMarketplaceSettingsAsync();
+                refundAmount = (long)(settings.PremiumMonthlyCreditCost * (remaining / 30.0) * 0.5);
+            }
+        }
+
+        profile.IsPremium = false;
+        profile.PremiumExpiresAt = null;
+        profile.PremiumTransactionId = null;
+        await cosmo.UpdateProviderProfileAsync(profile);
+
+        if (refundAmount > 0)
+            await creditService.RefundPremiumCreditsAsync(accountId, refundAmount);
+
+        await cosmo.ClearFeaturedItemsByAccountAsync(accountId);
+
+        return (profile, refundAmount);
+    }
+
+    /// <summary>
+    /// Toggle the featured flag on a marketplace item. Only Premium providers can feature items.
+    /// </summary>
+    public async Task<(bool Success, string? Error, MarketplaceItem? Item)> SetItemFeaturedAsync(string accountId, string itemId, bool isFeatured)
+    {
+        var profile = await cosmo.GetProviderProfileAsync(accountId);
+        if (profile is null)
+            return (false, "Provider profile not found", null);
+
+        if (!profile.IsPremium)
+            return (false, "Only Premium providers can feature items", null);
+
+        var item = await cosmo.GetMarketplaceItemByIdAsync(itemId);
+        if (item is null)
+            return (false, "Item not found", null);
+
+        if (item.AccountId != accountId)
+            return (false, "You can only feature your own items", null);
+
+        if (item.Status != MarketplaceItemStatus.Approved)
+            return (false, "Only approved items can be featured", null);
+
+        if (isFeatured)
+        {
+            var settings = await cosmo.GetMarketplaceSettingsAsync();
+            var currentCount = await cosmo.GetFeaturedItemCountByAccountAsync(accountId);
+            if (currentCount >= settings.MaxFeaturedItemsPerProvider)
+                return (false, $"Maximum {settings.MaxFeaturedItemsPerProvider} featured items allowed", null);
+        }
+
+        item.IsFeatured = isFeatured;
+        await cosmo.UpdateMarketplaceItemAsync(item);
+
+        return (true, null, item);
+    }
+
+    /// <summary>
+    /// Process premium provider subscription renewals. Called by background service.
+    /// </summary>
+    public async Task<int> ProcessPremiumRenewalsAsync()
+    {
+        var expiringProviders = await cosmo.GetExpiringPremiumProvidersAsync(DateTime.UtcNow.AddHours(24));
+        int renewed = 0;
+
+        foreach (var profile in expiringProviders)
+        {
+            var settings = await cosmo.GetMarketplaceSettingsAsync();
+            var transaction = await creditService.SpendPremiumCreditsAsync(profile.AccountId, settings.PremiumMonthlyCreditCost);
+
+            if (transaction is null)
+            {
+                // Insufficient credits — cancel premium
+                profile.IsPremium = false;
+                profile.PremiumExpiresAt = null;
+                await cosmo.UpdateProviderProfileAsync(profile);
+                await cosmo.ClearFeaturedItemsByAccountAsync(profile.AccountId);
+                continue;
+            }
+
+            // Extend premium
+            profile.PremiumExpiresAt = (profile.PremiumExpiresAt ?? DateTime.UtcNow).AddDays(30);
+            profile.PremiumTransactionId = transaction.Id;
+            await cosmo.UpdateProviderProfileAsync(profile);
             renewed++;
         }
 

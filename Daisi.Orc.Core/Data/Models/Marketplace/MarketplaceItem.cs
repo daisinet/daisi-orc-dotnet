@@ -88,6 +88,34 @@ public class MarketplaceItem
     public int PurchaseCount { get; set; }
     public double AverageRating { get; set; }
     public int RatingCount { get; set; }
+    public bool IsFeatured { get; set; }
+
+    // --- Secure execution fields ---
+
+    /// <summary>
+    /// When true, the tool executes on the provider's server instead of being downloaded as a DLL.
+    /// </summary>
+    public bool IsSecureExecution { get; set; }
+
+    /// <summary>
+    /// The provider's API base URL for secure tool execution (e.g. "https://myfunc.azurewebsites.net/api").
+    /// </summary>
+    public string? SecureEndpointUrl { get; set; }
+
+    /// <summary>
+    /// Shared secret sent as X-Daisi-Auth header from ORC to provider for authentication.
+    /// </summary>
+    public string? SecureAuthKey { get; set; }
+
+    /// <summary>
+    /// Setup parameters that users must provide (API keys, credentials, etc.).
+    /// </summary>
+    public List<SetupParameterData> SetupParameters { get; set; } = [];
+
+    /// <summary>
+    /// The tool definition metadata (ID, name, instructions, parameters, group).
+    /// </summary>
+    public SecureToolDefinitionData? SecureToolDefinition { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

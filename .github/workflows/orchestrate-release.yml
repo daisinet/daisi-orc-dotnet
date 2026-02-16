@@ -235,3 +235,57 @@ jobs:
 
           echo "Timed out waiting for Host release"
           exit 1
+
+  release-bot:
+    name: Release Bot
+    needs: deploy-orc
+    if: always() && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch Bot release workflow
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          gh workflow run release-bot.yml \
+            --repo daisinet/daisi-bot-dotnet \
+            --field timestamp_version=${{ inputs.version }} \
+            --field release_group=${{ inputs.release_group }} \
+            --field activate=${{ inputs.activate }} \
+            --field release_notes="${{ inputs.release_notes }}"
+
+      - name: Wait for Bot release to complete
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        shell: bash
+        run: |
+          echo "Waiting for Bot release workflow to start..."
+          sleep 15
+
+          for i in $(seq 1 60); do
+            STATUS=$(gh run list \
+              --repo daisinet/daisi-bot-dotnet \
+              --workflow release-bot.yml \
+              --limit 1 \
+              --json status,conclusion \
+              --jq '.[0]')
+
+            RUN_STATUS=$(echo "$STATUS" | jq -r '.status')
+            RUN_CONCLUSION=$(echo "$STATUS" | jq -r '.conclusion')
+
+            echo "Attempt $i: status=$RUN_STATUS, conclusion=$RUN_CONCLUSION"
+
+            if [ "$RUN_STATUS" = "completed" ]; then
+              if [ "$RUN_CONCLUSION" = "success" ]; then
+                echo "Bot release completed successfully"
+                exit 0
+              else
+                echo "Bot release failed with conclusion: $RUN_CONCLUSION"
+                exit 1
+              fi
+            fi
+
+            sleep 30
+          done
+
+          echo "Timed out waiting for Bot release"
+          exit 1

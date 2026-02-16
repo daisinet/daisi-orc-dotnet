@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Collections.Concurrent;
+using System.Text.Json;
 using Daisi.SDK.Extensions;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
@@ -23,6 +24,8 @@ namespace Daisi.Orc.Core.Data.Db
             return new(connectionString, options);
         });
 
+        private readonly ConcurrentDictionary<string, Container> _containerCache = new();
+
         public static string GenerateId(string prefix)
         {
             return $"{prefix}-{DateTime.UtcNow.ToString("yyMMddHHmmss")}-{StringExtensions.Random(includeNumbers: false).ToLower()}";
@@ -41,6 +44,9 @@ namespace Daisi.Orc.Core.Data.Db
 
         public async Task<Container> GetContainerAsync(string containerName)
         {
+            if (_containerCache.TryGetValue(containerName, out var cached))
+                return cached;
+
             string partitionKeyPath = "/" +
                 containerName switch
                 {
@@ -58,13 +64,17 @@ namespace Daisi.Orc.Core.Data.Db
                     ModelsContainerName => ModelsPartitionKeyName,
                     CreditsContainerName => CreditsPartitionKeyName,
                     ReleasesContainerName => ReleasesPartitionKeyName,
+                    BotReleasesContainerName => BotReleasesPartitionKeyName,
+                    BotInstallsContainerName => BotInstallsPartitionKeyName,
                     MarketplaceContainerName => MarketplacePartitionKeyName,
                     PurchasesContainerName => PurchasesPartitionKeyName,
                     ProvidersContainerName => ProvidersPartitionKeyName,
+                    CreditAnomaliesContainerName => CreditAnomaliesPartitionKeyName,
                     _ => "id"
                 };
-                    
-            var container = await GetDatabase().CreateContainerIfNotExistsAsync(containerName, partitionKeyPath);          
+
+            var container = await GetDatabase().CreateContainerIfNotExistsAsync(containerName, partitionKeyPath);
+            _containerCache.TryAdd(containerName, container);
             return container;
         }
     }

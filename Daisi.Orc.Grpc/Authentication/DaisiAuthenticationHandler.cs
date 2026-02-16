@@ -85,8 +85,7 @@ namespace Daisi.Orc.Grpc.Authentication
 
             if (result.Owner?.SystemRole == SystemRoles.User)
             {
-                var allowedLogin = await cosmo.UserAllowedToLogin(result.Owner.Id);
-                if (!allowedLogin)
+                if (!result.Owner.AllowedToLogin)
                     return AuthenticateResult.Fail($"DAISI: User not allowed to login.");
 
                 claimsIdentity.AddClaim(new Claim(DaisiAuthentication.USER_ID_CLAIM, result.Owner.Id));

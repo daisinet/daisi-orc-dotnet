@@ -20,6 +20,7 @@ namespace Daisi.Orc.Core.Data.Db
 
             var account = new CreditAccount
             {
+                Id = CreditAccount.GetDeterministicId(accountId),
                 AccountId = accountId,
                 Balance = 0,
                 TotalEarned = 0,
@@ -28,14 +29,35 @@ namespace Daisi.Orc.Core.Data.Db
             };
 
             var container = await GetContainerAsync(CreditsContainerName);
-            var item = await container.CreateItemAsync(account, new PartitionKey(accountId));
-            return item.Resource;
+            try
+            {
+                var item = await container.CreateItemAsync(account, new PartitionKey(accountId));
+                return item.Resource;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                // Another call created it between our read and create — just read it back
+                return (await GetCreditAccountAsync(accountId))!;
+            }
         }
 
         public virtual async Task<CreditAccount?> GetCreditAccountAsync(string accountId)
         {
             var container = await GetContainerAsync(CreditsContainerName);
 
+            // Try point read with deterministic ID first (1 RU)
+            try
+            {
+                var deterministicId = CreditAccount.GetDeterministicId(accountId);
+                var item = await container.ReadItemAsync<CreditAccount>(deterministicId, new PartitionKey(accountId));
+                return item.Resource;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                // Fall through to query for legacy records with random IDs
+            }
+
+            // Fallback query for legacy CreditAccount documents with random IDs
             var query = new QueryDefinition("SELECT * FROM c WHERE c.AccountId = @accountId AND IS_DEFINED(c.Balance)")
                 .WithParameter("@accountId", accountId);
 
@@ -65,6 +87,18 @@ namespace Daisi.Orc.Core.Data.Db
             var response = await container.PatchItemAsync<CreditAccount>(
                 creditAccount.Id, new PartitionKey(creditAccount.AccountId), patchOperations);
             return response.Resource;
+        }
+
+        public virtual async Task PatchCreditAccountBonusTierAsync(string creditAccountId, string accountId, UptimeBonusTier tier)
+        {
+            List<PatchOperation> patchOperations = new()
+            {
+                PatchOperation.Replace("/CachedBonusTier", tier),
+                PatchOperation.Replace("/BonusTierCalculatedAt", DateTime.UtcNow)
+            };
+
+            var container = await GetContainerAsync(CreditsContainerName);
+            await container.PatchItemAsync<CreditAccount>(creditAccountId, new PartitionKey(accountId), patchOperations);
         }
 
         public virtual async Task<CreditAccount> PatchCreditAccountMultipliersAsync(string accountId, double? tokenMultiplier, double? uptimeMultiplier)

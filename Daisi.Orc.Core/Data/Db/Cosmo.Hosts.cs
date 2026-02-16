@@ -40,7 +40,7 @@ namespace Daisi.Orc.Core.Data.Db
                 return null;
             }
         }
-        public async Task<Host?> GetHostAsync(string accountId, string hostId)
+        public virtual async Task<Host?> GetHostAsync(string accountId, string hostId)
         {
             var container = await GetContainerAsync(HostsContainerName);
             try
@@ -126,6 +126,7 @@ namespace Daisi.Orc.Core.Data.Db
                 PatchOperation.Set("/Name", host.Name),
                 PatchOperation.Set("/DirectConnect", host.DirectConnect),
                 PatchOperation.Set("/PeerConnect", host.PeerConnect),
+                PatchOperation.Set("/ToolsOnly", host.ToolsOnly),
                 PatchOperation.Set("/ReleaseGroup", host.ReleaseGroup),
                 PatchOperation.Set("/UpdateOperation", "Web"),
             };
@@ -195,7 +196,16 @@ namespace Daisi.Orc.Core.Data.Db
             var response = await container.PatchItemAsync<Host>(hostId, new PartitionKey(accountId), patchOperations);
         }
 
-      
+        public async Task PatchHostSecretKeyIdAsync(string hostId, string accountId, string secretKeyId)
+        {
+            List<PatchOperation> patchOperations = new List<PatchOperation>()
+            {
+                PatchOperation.Set("/SecretKeyId", secretKeyId)
+            };
+
+            var container = await GetContainerAsync(HostsContainerName);
+            await container.PatchItemAsync<Host>(hostId, new PartitionKey(accountId), patchOperations);
+        }
 
         #endregion
 

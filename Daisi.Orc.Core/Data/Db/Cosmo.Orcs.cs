@@ -21,7 +21,6 @@ namespace Daisi.Orc.Core.Data.Db
         public virtual async Task<PagedResult<Orchestrator>> GetOrcsAsync(Protos.V1.PagingInfo? paging, string? orcId, string? accountId)
         {
             var container = await GetContainerAsync(OrcsContainerName);
-            var networks = await GetNetworksAsync(accountId: accountId);
 
             var query = container.GetItemLinqQueryable<Orchestrator>()
                                  .Where(orc => orc.AccountId == accountId || orc.Networks.Any(n => n.IsPublic));
@@ -36,13 +35,17 @@ namespace Daisi.Orc.Core.Data.Db
             return results;
         }
 
-        public async Task<Orchestrator> CreateOrcAsync(Orchestrator orc, string accountId)
+        public async Task<Orchestrator> CreateOrcAsync(Orchestrator orc, string accountId, string? accountName = null)
         {
             var container = await GetContainerAsync(OrcsContainerName);
-            var account = await GetAccountAsync(accountId);
+            if (string.IsNullOrEmpty(accountName))
+            {
+                var account = await GetAccountAsync(accountId);
+                accountName = account.Name;
+            }
             orc.Id = GenerateId(OrcsIdPrefix);
             orc.AccountId = accountId;
-            orc.AccountName = account.Name;
+            orc.AccountName = accountName;
 
             orc.Name = orc.Name.ToLower();
             var result = await container.CreateItemAsync(orc);

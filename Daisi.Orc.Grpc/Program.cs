@@ -36,13 +36,18 @@ public partial class Program
         builder.Services.AddScoped<OrcService>();
         builder.Services.AddScoped<CreditService>();
         builder.Services.AddScoped<MarketplaceService>();
+        builder.Services.AddScoped<SecureToolService>();
+        builder.Services.AddHttpClient();
         builder.Services.AddSingleton<GitHubReleaseService>();
+        builder.Services.AddHttpClient();
+        builder.Services.AddSingleton<HuggingFaceService>();
 
         builder.Services.AddTransient<HeartbeatRequestCommandHandler>();
         builder.Services.AddTransient<SessionIncomingQueueHandler>();
         builder.Services.AddTransient<EnvironmentRequestCommandHandler>();
         builder.Services.AddTransient<InferenceCommandHandler>();
         builder.Services.AddTransient<InferenceReceiptCommandHandler>();
+        builder.Services.AddTransient<ToolExecutionCommandHandler>();
 
         // Add services to the container.
         builder.Services.AddGrpc(options =>
@@ -55,6 +60,7 @@ public partial class Program
         builder.Services.AddHostedService<SessionCleanupService>();
         builder.Services.AddHostedService<UptimeCreditService>();
         builder.Services.AddHostedService<SubscriptionRenewalService>();
+        builder.Services.AddHostedService<CreditAnomalyService>();
 
         var app = App = builder.Build();
 
@@ -74,6 +80,7 @@ public partial class Program
         app.MapGrpcService<ReleasesRPC>();
         app.MapGrpcService<SkillsRPC>();
         app.MapGrpcService<MarketplaceRPC>();
+        app.MapGrpcService<SecureToolRPC>();
 
 #if DEBUG
         builder.Logging.AddDebug();
@@ -109,7 +116,7 @@ public partial class Program
                     Enabled = true,
                     LoadAtStartup = false,
                     HasReasoning = false,
-                    LLama = new DaisiModelLLamaSettings
+                    Backend = new DaisiModelBackendSettings
                     {
                         Runtime = 0,
                         ContextSize = 8192,
@@ -129,7 +136,7 @@ public partial class Program
                     Enabled = true,
                     LoadAtStartup = false,
                     HasReasoning = false,
-                    LLama = new DaisiModelLLamaSettings
+                    Backend = new DaisiModelBackendSettings
                     {
                         Runtime = 0,
                         ContextSize = 8192,

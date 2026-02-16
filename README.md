@@ -15,8 +15,6 @@ isn't leaving the local network, but SSL is still recommended even for private n
   },
   "Daisi": {
     "AccountId": "<< Daisi Orc Account ID >>", // Every orc is associated with an account in the database, even public Orcs.
-    "MinimumHostVersion": "2025.11.30.00", // Legacy fallback: minimum Host version if no database release exists for the group. Follows dating method YYYY.MM.dd.mm.
-    "MinimumHostVersion-beta": "2025.11.30.00", // Legacy fallback for a specific release group (e.g. "beta"). Only used when no active release record is found in the Releases container.
     "OrcVersion": "1.0.0", // The version of this Orc instance. Updated automatically by deploy-orc.yml on each release.
     "MaxHosts": 20, // Maximum number of hosts supported by the Orc. Future Hosts that attempt to connect will be sent to "NextOrcId"
     "NextOrcId": "orc-xxx-next", // The ID of the Orc to send overflow. You can daisy-chain (pun intended) Orcs and even have them loop until a connection slot can be found.
@@ -34,6 +32,72 @@ When a host sends an `InferenceReceipt`, the ORC's `InferenceReceiptCommandHandl
 
 This ensures the dashboard always has data while credits only transfer between distinct accounts.
 
+#### Receipt Deduplication
+
+The `InferenceReceiptCommandHandler` maintains an in-memory `ConcurrentDictionary` keyed by `"{hostId}:{inferenceId}"` to prevent the same receipt from being processed twice. If a duplicate receipt arrives, it is logged and skipped. Entries expire after 24 hours via periodic cleanup. This adds zero latency — it's a single dictionary lookup before processing.
+
+### Credit Anomaly Detection
+
+The ORC includes an async anomaly detection system that scans for suspicious credit patterns without adding latency to the inference hot path. All checks run in the `CreditAnomalyService` background service every 30 minutes.
+
+#### Anomaly Types
+
+| Type | Severity | Description |
+|------|----------|-------------|
+| **Inflated Tokens** | Medium/High | Host's average token count per inference exceeds 10x the network-wide median |
+| **Receipt Volume Spike** | Medium/High | Host submits more receipts in the last hour than 3x its 7-day hourly average |
+| **Zero Work Uptime** | Low | Host has been online 7+ days with zero inferences processed |
+| **Circular Credit Flow** | High | Two accounts consistently serve each other's consumers (potential collusion) |
+| **Receipt Replay** | High | Same receipt submitted multiple times (blocked by dedup, logged as anomaly) |
+
+#### Architecture
+
+- **Detection**: `CreditAnomalyService` (background service) queries inference stats and credit transactions to identify anomalous patterns.
+- **Storage**: Anomalies are stored in a `CreditAnomalies` CosmosDB container partitioned by `AccountId`.
+- **Review**: Admin-only gRPC RPCs (`GetCreditAnomalies`, `ReviewCreditAnomaly`) in `CreditsRPC` allow admins to list, filter, and review anomalies.
+- **UI**: The Manager admin panel includes a "Credit Anomalies" tab for reviewing flagged accounts.
+
+#### Design Principles
+
+- **No hot-path changes** — inference latency is unaffected
+- **No auto-penalization** — anomalies are flagged for human review, not auto-acted on
+- **After-the-fact detection** — all checks run asynchronously in a background service
+
+### Tool Delegation Routing
+
+The ORC supports **tool delegation** for tools-only hosts. When a host is marked as `ToolsOnly`, it is excluded from inference session routing but remains available to execute tools on behalf of other hosts.
+
+**How it works:**
+1. An inference host sends an `ExecuteToolRequest` command to the ORC via the command channel.
+2. The ORC's `ToolExecutionCommandHandler` finds an available tools-only host in the same account using `GetNextToolsOnlyHost()` (LRU ordering).
+3. The ORC forwards the request to the tools-only host via `SendToolExecutionToHostAsync()`.
+4. The tools-only host executes the tool and returns an `ExecuteToolResponse`.
+5. The ORC relays the response back to the requesting inference host.
+
+The `Host` data model includes a `ToolsOnly` boolean field that is:
+- Persisted in Cosmos DB (included in `PatchHostForWebUpdateAsync`)
+- Synced to in-memory state via `UpdateConfigurableWebSettingsAsync`
+- Propagated through `HostsRPC.Register`, `Update`, and `GetHosts`
+- Filterable in `GetNextHost()` (tools-only hosts are excluded) and `GetNextToolsOnlyHost()` (only tools-only hosts are returned)
+
+### Secure Tool Lifecycle (Install/Uninstall + Discovery)
+
+The ORC manages the secure tool lifecycle — install/uninstall notifications and tool discovery — but is **not** in the execution hot path. Consumer hosts and the Manager UI call providers directly via HTTP.
+
+**Key components:**
+- `SecureToolService` — Handles `NotifyProviderInstallAsync` (HTTP POST to provider `/install` on purchase), `NotifyProviderUninstallAsync` (HTTP POST to provider `/uninstall` on deactivation), and `GetInstalledToolsAsync` (queries purchases and returns tool definitions with `InstallId` and `EndpointUrl` for direct provider communication).
+- `SecureToolRPC` — gRPC service implementing `SecureToolProto.SecureToolProtoBase` with `GetInstalledSecureTools` only. Returns `InstallId` and `EndpointUrl` per tool.
+- `MarketplacePurchase.SecureInstallId` — Opaque identifier generated on purchase, shared with the provider. Never contains AccountId.
+- `MarketplaceItem` extensions — Fields: `IsSecureExecution`, `SecureEndpointUrl`, `SecureAuthKey`, `SetupParameters`, `SecureToolDefinition`.
+
+**Architecture:**
+- On purchase, the ORC generates an `InstallId` (via `Cosmo.GenerateId("inst")`) and HTTP POSTs to the provider's `/install` endpoint with `X-Daisi-Auth`.
+- On deactivation (subscription expiry, cancellation), the ORC HTTP POSTs to `/uninstall`.
+- Hosts and Manager call `/execute` and `/configure` directly using the `InstallId` — no ORC relay.
+- For free approved tools, a deterministic `InstallId` is generated from a SHA-256 hash of `accountId:itemId` so AccountId is never exposed.
+
+**Provider API contract:** Providers implement four HTTP POST endpoints (`/install`, `/uninstall`, `/configure`, `/execute`) documented in the [Secure Tool API Reference](https://daisi.ai/learn/marketplace/secure-tool-api-reference).
+
 ### Project - Daisi.Orc.Core
 This is the core library that contains various interfaces and a CosmoDb repository, which is used by default. Abstraction for other databases and repository types is planned, but not yet implemented.
 
@@ -42,7 +106,7 @@ The `HostRelease` data model and `Cosmo.Releases.cs` partial class provide datab
 
 The `ReleasesRPC` gRPC service exposes CRUD operations: `Create`, `GetReleases`, `GetActiveRelease`, and `Activate`. Activating a release deactivates all others in the same group, enabling instant rollback by re-activating an older release.
 
-During heartbeat and environment checks, the Orc queries the active release for the host's release group. If the host's version is older than the active release, an `UpdateRequiredRequest` is sent with the appropriate Velopack **channel** and the host self-updates from Azure Blob Storage (`releases/velopack/{channel}/{rid}/`). If no database release exists for the group, the system falls back to the `Daisi:MinimumHostVersion` config key for backward compatibility.
+During heartbeat and environment checks, the Orc queries the active release for the host's release group. If the host's version is older than the active release, an `UpdateRequiredRequest` is sent with the appropriate Velopack **channel** and the host self-updates from Azure Blob Storage (`releases/velopack/{channel}/{rid}/`).
 
 **Production as a version floor:** Production releases act as a minimum version for all release groups. When a non-production host checks for updates, the Orc compares the host's group-specific active release against the production active release and picks whichever has the higher version. If production wins, the host receives `Channel=production` so it downloads from the production blob path. This means that when production ships a version newer than what a group has, all hosts across every group will update to at least the production version — no host can fall behind production regardless of its release group.
 

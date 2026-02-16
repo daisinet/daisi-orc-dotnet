@@ -193,6 +193,14 @@ namespace Daisi.Orc.Core.Data.Db
 
             var container = await GetContainerAsync(AccountsContainerName);
             var response = await container.PatchItemAsync<Models.User>(user.Id, GetPartitionKey(user), patchOperations);
+
+            // Sync AllowedToLogin and Role to all access keys owned by this user
+            var keys = await GetKeyStubsByOwnerIdAsync(user.Id);
+            foreach (var key in keys)
+            {
+                await PatchKeyOwnerUserFieldsAsync(key, user.AllowedToLogin, user.Role);
+            }
+
             return response.Resource;
         }
 

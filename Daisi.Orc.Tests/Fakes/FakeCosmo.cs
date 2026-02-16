@@ -17,6 +17,8 @@ namespace Daisi.Orc.Tests.Fakes
         public List<CreditTransaction> Transactions { get; } = new();
         public List<UptimePeriod> UptimePeriods { get; } = new();
         public List<HostRelease> Releases { get; } = new();
+        public List<CreditAnomaly> CreditAnomalies { get; } = new();
+        public List<Host> Hosts { get; } = new();
 
         public FakeCosmo() : base(new ConfigurationBuilder().Build(), "unused")
         {
@@ -26,7 +28,7 @@ namespace Daisi.Orc.Tests.Fakes
         {
             var account = CreditAccounts.GetOrAdd(accountId, _ => new CreditAccount
             {
-                Id = GenerateId(CreditAccountIdPrefix),
+                Id = CreditAccount.GetDeterministicId(accountId),
                 AccountId = accountId,
                 Balance = 0,
                 TotalEarned = 0,
@@ -50,12 +52,22 @@ namespace Daisi.Orc.Tests.Fakes
             return Task.FromResult(creditAccount);
         }
 
+        public override Task PatchCreditAccountBonusTierAsync(string creditAccountId, string accountId, UptimeBonusTier tier)
+        {
+            if (CreditAccounts.TryGetValue(accountId, out var account))
+            {
+                account.CachedBonusTier = tier;
+                account.BonusTierCalculatedAt = DateTime.UtcNow;
+            }
+            return Task.CompletedTask;
+        }
+
         public override Task<CreditAccount> PatchCreditAccountMultipliersAsync(
             string accountId, double? tokenMultiplier, double? uptimeMultiplier)
         {
             var account = CreditAccounts.GetOrAdd(accountId, _ => new CreditAccount
             {
-                Id = GenerateId(CreditAccountIdPrefix),
+                Id = CreditAccount.GetDeterministicId(accountId),
                 AccountId = accountId
             });
 
@@ -121,18 +133,20 @@ namespace Daisi.Orc.Tests.Fakes
         /// Seed a credit account with a specific balance for testing.
         /// </summary>
         public CreditAccount SeedAccount(string accountId, long balance = 0,
-            double tokenMultiplier = 1.0, double uptimeMultiplier = 1.0)
+            double tokenMultiplier = 1.0, double uptimeMultiplier = 1.0,
+            UptimeBonusTier cachedBonusTier = UptimeBonusTier.None)
         {
             var account = new CreditAccount
             {
-                Id = GenerateId(CreditAccountIdPrefix),
+                Id = CreditAccount.GetDeterministicId(accountId),
                 AccountId = accountId,
                 Balance = balance,
                 TotalEarned = 0,
                 TotalSpent = 0,
                 TotalPurchased = 0,
                 TokenEarnMultiplier = tokenMultiplier,
-                UptimeEarnMultiplier = uptimeMultiplier
+                UptimeEarnMultiplier = uptimeMultiplier,
+                CachedBonusTier = cachedBonusTier
             };
 
             CreditAccounts[accountId] = account;
@@ -156,10 +170,64 @@ namespace Daisi.Orc.Tests.Fakes
             });
         }
 
+        public override Task<Host?> GetHostAsync(string accountId, string hostId)
+        {
+            var host = Hosts.FirstOrDefault(h => h.AccountId == accountId && h.Id == hostId);
+            return Task.FromResult(host);
+        }
+
         public override Task<HostRelease?> GetActiveReleaseAsync(string releaseGroup)
         {
             var release = Releases.FirstOrDefault(r => r.ReleaseGroup == releaseGroup && r.IsActive);
             return Task.FromResult(release);
+        }
+
+        public override Task<CreditAnomaly> CreateCreditAnomalyAsync(CreditAnomaly anomaly)
+        {
+            if (string.IsNullOrWhiteSpace(anomaly.Id))
+                anomaly.Id = GenerateId(CreditAnomalyIdPrefix);
+            CreditAnomalies.Add(anomaly);
+            return Task.FromResult(anomaly);
+        }
+
+        public override Task<PagedResult<CreditAnomaly>> GetCreditAnomaliesAsync(
+            string? accountId = null,
+            AnomalyType? type = null,
+            AnomalyStatus? status = null,
+            int? pageSize = 20,
+            int? pageIndex = 0)
+        {
+            var query = CreditAnomalies.AsEnumerable();
+
+            if (!string.IsNullOrEmpty(accountId))
+                query = query.Where(a => a.AccountId == accountId);
+            if (type.HasValue)
+                query = query.Where(a => a.Type == type.Value);
+            if (status.HasValue)
+                query = query.Where(a => a.Status == status.Value);
+
+            var filtered = query.OrderByDescending(a => a.DateCreated).ToList();
+            var size = pageSize ?? 20;
+            var index = pageIndex ?? 0;
+
+            return Task.FromResult(new PagedResult<CreditAnomaly>
+            {
+                TotalCount = filtered.Count,
+                Items = filtered.Skip(index * size).Take(size).ToList()
+            });
+        }
+
+        public override Task<CreditAnomaly> UpdateCreditAnomalyStatusAsync(
+            string anomalyId, string accountId, AnomalyStatus newStatus, string? reviewedBy)
+        {
+            var anomaly = CreditAnomalies.FirstOrDefault(a => a.Id == anomalyId && a.AccountId == accountId);
+            if (anomaly is null)
+                throw new Exception($"Anomaly {anomalyId} not found for account {accountId}");
+
+            anomaly.Status = newStatus;
+            anomaly.DateReviewed = DateTime.UtcNow;
+            anomaly.ReviewedBy = reviewedBy;
+            return Task.FromResult(anomaly);
         }
     }
 }
