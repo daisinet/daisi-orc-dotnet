@@ -85,16 +85,18 @@ The `Host` data model includes a `ToolsOnly` boolean field that is:
 The ORC manages the secure tool lifecycle — install/uninstall notifications and tool discovery — but is **not** in the execution hot path. Consumer hosts and the Manager UI call providers directly via HTTP.
 
 **Key components:**
-- `SecureToolService` — Handles `NotifyProviderInstallAsync` (HTTP POST to provider `/install` on purchase), `NotifyProviderUninstallAsync` (HTTP POST to provider `/uninstall` on deactivation), and `GetInstalledToolsAsync` (queries purchases and returns tool definitions with `InstallId` and `EndpointUrl` for direct provider communication).
-- `SecureToolRPC` — gRPC service implementing `SecureToolProto.SecureToolProtoBase` with `GetInstalledSecureTools` only. Returns `InstallId` and `EndpointUrl` per tool.
+- `SecureToolService` — Handles `NotifyProviderInstallAsync` (HTTP POST to provider `/install` on purchase), `NotifyProviderUninstallAsync` (HTTP POST to provider `/uninstall` on deactivation), and `GetInstalledToolsAsync` (queries purchases and returns tool definitions with `InstallId`, `EndpointUrl`, and `BundleInstallId` for direct provider communication).
+- `SecureToolRPC` — gRPC service implementing `SecureToolProto.SecureToolProtoBase` with `GetInstalledSecureTools` only. Returns `InstallId`, `EndpointUrl`, and `BundleInstallId` per tool.
 - `MarketplacePurchase.SecureInstallId` — Opaque identifier generated on purchase, shared with the provider. Never contains AccountId.
+- `MarketplacePurchase.BundleInstallId` — Shared bundle identifier for OAuth. All tools in a plugin bundle share this ID so users only need to OAuth-connect once per provider.
 - `MarketplaceItem` extensions — Fields: `IsSecureExecution`, `SecureEndpointUrl`, `SecureAuthKey`, `SetupParameters`, `SecureToolDefinition`.
 - `SetupParameterData` includes `AuthUrl` and `ServiceLabel` fields for OAuth-type parameters. These are pure pass-through — the ORC stores and returns them but does not interpret or act on them. The OAuth lifecycle is entirely between the provider and the Manager UI.
 
 **Architecture:**
 - On purchase, the ORC generates an `InstallId` (via `Cosmo.GenerateId("inst")`) and HTTP POSTs to the provider's `/install` endpoint with `X-Daisi-Auth`.
+- **Bundle purchase flow:** When a Plugin with `BundledItemIds` is purchased, the ORC generates a shared `BundleInstallId` (via `Cosmo.GenerateId("binst")`), creates child purchase records for each bundled secure tool (each with its own `InstallId` but sharing the `BundleInstallId`), and notifies the provider for each tool with both IDs.
 - On deactivation (subscription expiry, cancellation), the ORC HTTP POSTs to `/uninstall`.
-- Hosts and Manager call `/execute` and `/configure` directly using the `InstallId` — no ORC relay.
+- Hosts and Manager call `/execute` and `/configure` directly using the `InstallId` — no ORC relay. OAuth calls use `BundleInstallId` when present.
 - For free approved tools, a deterministic `InstallId` is generated from a SHA-256 hash of `accountId:itemId` so AccountId is never exposed.
 
 **Provider API contract:** Providers implement four HTTP POST endpoints (`/install`, `/uninstall`, `/configure`, `/execute`) documented in the [Secure Tool API Reference](https://daisi.ai/learn/marketplace/secure-tool-api-reference).

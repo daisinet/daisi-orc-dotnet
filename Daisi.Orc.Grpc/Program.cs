@@ -81,6 +81,7 @@ public partial class Program
         app.MapGrpcService<SkillsRPC>();
         app.MapGrpcService<MarketplaceRPC>();
         app.MapGrpcService<SecureToolRPC>();
+        app.MapGrpcService<BlogsRPC>();
 
 #if DEBUG
         builder.Logging.AddDebug();
