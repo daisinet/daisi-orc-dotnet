@@ -142,10 +142,6 @@ public class MarketplaceService(Cosmo cosmo, CreditService creditService, Secure
         if (item is null)
             return false;
 
-        // Check if account owns the item (is the provider)
-        if (item.AccountId == accountId)
-            return true;
-
         // Check purchase
         var purchase = await cosmo.GetPurchaseAsync(accountId, marketplaceItemId);
         if (purchase is null)
