@@ -89,6 +89,7 @@ The ORC manages the secure tool lifecycle — install/uninstall notifications an
 - `SecureToolRPC` — gRPC service implementing `SecureToolProto.SecureToolProtoBase` with `GetInstalledSecureTools` only. Returns `InstallId` and `EndpointUrl` per tool.
 - `MarketplacePurchase.SecureInstallId` — Opaque identifier generated on purchase, shared with the provider. Never contains AccountId.
 - `MarketplaceItem` extensions — Fields: `IsSecureExecution`, `SecureEndpointUrl`, `SecureAuthKey`, `SetupParameters`, `SecureToolDefinition`.
+- `SetupParameterData` includes `AuthUrl` and `ServiceLabel` fields for OAuth-type parameters. These are pure pass-through — the ORC stores and returns them but does not interpret or act on them. The OAuth lifecycle is entirely between the provider and the Manager UI.
 
 **Architecture:**
 - On purchase, the ORC generates an `InstallId` (via `Cosmo.GenerateId("inst")`) and HTTP POSTs to the provider's `/install` endpoint with `X-Daisi-Auth`.

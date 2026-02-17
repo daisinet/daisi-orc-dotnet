@@ -130,7 +130,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
                 Name = sp.Name,
                 Description = sp.Description,
                 Type = sp.Type,
-                IsRequired = sp.IsRequired
+                IsRequired = sp.IsRequired,
+                AuthUrl = sp.AuthUrl,
+                ServiceLabel = sp.ServiceLabel
             }).ToList();
         }
         else
@@ -684,7 +686,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
                     Name = sp.Name,
                     Description = sp.Description,
                     Type = sp.Type,
-                    IsRequired = sp.IsRequired
+                    IsRequired = sp.IsRequired,
+                    AuthUrl = sp.AuthUrl,
+                    ServiceLabel = sp.ServiceLabel
                 });
             }
         }
@@ -750,7 +754,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
                 Name = sp.Name,
                 Description = sp.Description,
                 Type = sp.Type,
-                IsRequired = sp.IsRequired
+                IsRequired = sp.IsRequired,
+                AuthUrl = sp.AuthUrl,
+                ServiceLabel = sp.ServiceLabel
             }).ToList();
         }
 
