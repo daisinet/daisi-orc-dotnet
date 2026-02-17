@@ -35,4 +35,10 @@ public class MarketplacePurchase
     /// Generated on purchase for secure execution tools. Never contains AccountId.
     /// </summary>
     public string? SecureInstallId { get; set; }
+
+    /// <summary>
+    /// Shared bundle identifier for OAuth. All tools in a plugin bundle share this ID
+    /// so users only need to OAuth-connect once per provider.
+    /// </summary>
+    public string? BundleInstallId { get; set; }
 }
