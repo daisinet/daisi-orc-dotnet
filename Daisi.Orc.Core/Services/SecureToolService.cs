@@ -18,7 +18,7 @@ public class SecureToolService(Cosmo cosmo, IHttpClientFactory httpClientFactory
     /// Notify the provider that a tool has been installed (purchased).
     /// Best-effort — logs and continues on failure.
     /// </summary>
-    public async Task NotifyProviderInstallAsync(MarketplaceItem item, string installId)
+    public async Task NotifyProviderInstallAsync(MarketplaceItem item, string installId, string? bundleInstallId = null)
     {
         if (string.IsNullOrEmpty(item.SecureEndpointUrl))
             return;
@@ -26,11 +26,18 @@ public class SecureToolService(Cosmo cosmo, IHttpClientFactory httpClientFactory
         try
         {
             var client = httpClientFactory.CreateClient();
-            var requestBody = new
-            {
-                installId,
-                toolId = item.SecureToolDefinition?.ToolId ?? string.Empty
-            };
+            var requestBody = !string.IsNullOrEmpty(bundleInstallId)
+                ? (object)new
+                {
+                    installId,
+                    toolId = item.SecureToolDefinition?.ToolId ?? string.Empty,
+                    bundleInstallId
+                }
+                : new
+                {
+                    installId,
+                    toolId = item.SecureToolDefinition?.ToolId ?? string.Empty
+                };
 
             var request = new HttpRequestMessage(HttpMethod.Post, $"{item.SecureEndpointUrl.TrimEnd('/')}/install");
             request.Content = JsonContent.Create(requestBody);
@@ -114,7 +121,8 @@ public class SecureToolService(Cosmo cosmo, IHttpClientFactory httpClientFactory
                     MarketplaceItemId = item.Id,
                     Tool = item.SecureToolDefinition,
                     InstallId = purchase.SecureInstallId ?? string.Empty,
-                    EndpointUrl = item.SecureEndpointUrl ?? string.Empty
+                    EndpointUrl = item.SecureEndpointUrl ?? string.Empty,
+                    BundleInstallId = purchase.BundleInstallId ?? string.Empty
                 });
             }
         }
@@ -159,4 +167,5 @@ public class InstalledSecureTool
     public SecureToolDefinitionData Tool { get; set; } = new();
     public string InstallId { get; set; } = string.Empty;
     public string EndpointUrl { get; set; } = string.Empty;
+    public string BundleInstallId { get; set; } = string.Empty;
 }
