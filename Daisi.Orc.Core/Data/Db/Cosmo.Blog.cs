@@ -73,5 +73,26 @@ namespace Daisi.Orc.Core.Data.Db
             var blog = await container.ReadItemAsync<Blog>(blogId, new PartitionKey(blogId));
             return blog.Resource;
         }
+
+        public async Task<Blog> UpdateBlogAsync(Blog blog)
+        {
+            var container = await GetContainerAsync(BlogsContainerName);
+            var item = await container.ReplaceItemAsync(blog, blog.Id, new PartitionKey(blog.BlogId));
+            return item.Resource;
+        }
+
+        public async Task<bool> DeleteBlogAsync(string blogId)
+        {
+            var container = await GetContainerAsync(BlogsContainerName);
+            try
+            {
+                await container.DeleteItemAsync<Blog>(blogId, new PartitionKey(blogId));
+                return true;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return false;
+            }
+        }
     }
 }
