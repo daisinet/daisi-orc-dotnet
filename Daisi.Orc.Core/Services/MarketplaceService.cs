@@ -142,11 +142,7 @@ public class MarketplaceService(Cosmo cosmo, CreditService creditService, Secure
         if (item is null)
             return false;
 
-        // Free items are always entitled
-        if (item.PricingModel == MarketplacePricingModel.MarketplacePricingFree && item.Status == MarketplaceItemStatus.Approved)
-            return true;
-
-        // Check if account owns the item
+        // Check if account owns the item (is the provider)
         if (item.AccountId == accountId)
             return true;
 
