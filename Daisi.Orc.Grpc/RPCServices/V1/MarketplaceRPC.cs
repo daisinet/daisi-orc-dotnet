@@ -130,7 +130,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
                 Name = sp.Name,
                 Description = sp.Description,
                 Type = sp.Type,
-                IsRequired = sp.IsRequired
+                IsRequired = sp.IsRequired,
+                AuthUrl = sp.AuthUrl,
+                ServiceLabel = sp.ServiceLabel
             }).ToList();
         }
         else
@@ -684,7 +686,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
                     Name = sp.Name,
                     Description = sp.Description,
                     Type = sp.Type,
-                    IsRequired = sp.IsRequired
+                    IsRequired = sp.IsRequired,
+                    AuthUrl = sp.AuthUrl,
+                    ServiceLabel = sp.ServiceLabel
                 });
             }
         }
@@ -750,7 +754,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
                 Name = sp.Name,
                 Description = sp.Description,
                 Type = sp.Type,
-                IsRequired = sp.IsRequired
+                IsRequired = sp.IsRequired,
+                AuthUrl = sp.AuthUrl,
+                ServiceLabel = sp.ServiceLabel
             }).ToList();
         }
 
@@ -788,7 +794,8 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
             IsSubscription = purchase.IsSubscription,
             IsActive = purchase.IsActive,
             PurchasedAt = Timestamp.FromDateTime(DateTime.SpecifyKind(purchase.PurchasedAt, DateTimeKind.Utc)),
-            SecureInstallId = purchase.SecureInstallId ?? string.Empty
+            SecureInstallId = purchase.SecureInstallId ?? string.Empty,
+            BundleInstallId = purchase.BundleInstallId ?? string.Empty
         };
 
         if (purchase.SubscriptionExpiresAt.HasValue)

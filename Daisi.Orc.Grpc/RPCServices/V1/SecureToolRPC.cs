@@ -34,7 +34,8 @@ public class SecureToolRPC(ILogger<SecureToolRPC> logger, SecureToolService secu
                 UseInstructions = installed.Tool.UseInstructions,
                 ToolGroup = installed.Tool.ToolGroup,
                 InstallId = installed.InstallId,
-                EndpointUrl = installed.EndpointUrl
+                EndpointUrl = installed.EndpointUrl,
+                BundleInstallId = installed.BundleInstallId
             };
 
             foreach (var p in installed.Tool.Parameters)

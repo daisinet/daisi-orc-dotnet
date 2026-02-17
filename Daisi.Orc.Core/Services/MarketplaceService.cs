@@ -83,12 +83,47 @@ public class MarketplaceService(Cosmo cosmo, CreditService creditService, Secure
             purchase.SecureInstallId = Cosmo.GenerateId("inst");
         }
 
+        // Bundle handling: if this is a Plugin with bundled items, generate a shared BundleInstallId
+        string? bundleInstallId = null;
+        if (item.ItemType == MarketplaceItemType.Plugin && item.BundledItemIds.Count > 0)
+        {
+            bundleInstallId = Cosmo.GenerateId("binst");
+            purchase.BundleInstallId = bundleInstallId;
+        }
+
         purchase = await cosmo.CreatePurchaseAsync(purchase);
 
         // Notify provider after purchase is persisted (best-effort)
         if (item.IsSecureExecution && !string.IsNullOrEmpty(purchase.SecureInstallId))
         {
-            await secureToolService.NotifyProviderInstallAsync(item, purchase.SecureInstallId);
+            await secureToolService.NotifyProviderInstallAsync(item, purchase.SecureInstallId, bundleInstallId);
+        }
+
+        // Create child purchases for bundled secure tools
+        if (bundleInstallId is not null)
+        {
+            foreach (var bundledItemId in item.BundledItemIds)
+            {
+                var bundledItem = await cosmo.GetMarketplaceItemByIdAsync(bundledItemId);
+                if (bundledItem is null || !bundledItem.IsSecureExecution)
+                    continue;
+
+                var childPurchase = new MarketplacePurchase
+                {
+                    AccountId = buyerAccountId,
+                    MarketplaceItemId = bundledItemId,
+                    MarketplaceItemName = bundledItem.Name,
+                    ItemType = bundledItem.ItemType,
+                    CreditsPaid = 0,
+                    SecureInstallId = Cosmo.GenerateId("inst"),
+                    BundleInstallId = bundleInstallId
+                };
+
+                await cosmo.CreatePurchaseAsync(childPurchase);
+
+                // Notify provider for each bundled tool (best-effort)
+                await secureToolService.NotifyProviderInstallAsync(bundledItem, childPurchase.SecureInstallId!, bundleInstallId);
+            }
         }
 
         // Increment purchase count

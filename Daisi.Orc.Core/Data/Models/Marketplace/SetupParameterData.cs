@@ -17,4 +17,10 @@ public class SetupParameterData
 
     /// <summary>Whether this parameter is required for the tool to function.</summary>
     public bool IsRequired { get; set; }
+
+    /// <summary>Provider's OAuth initiation URL. Only used when Type is "oauth".</summary>
+    public string AuthUrl { get; set; } = string.Empty;
+
+    /// <summary>Display label for the OAuth service (e.g. "Office 365"). Only used when Type is "oauth".</summary>
+    public string ServiceLabel { get; set; } = string.Empty;
 }
