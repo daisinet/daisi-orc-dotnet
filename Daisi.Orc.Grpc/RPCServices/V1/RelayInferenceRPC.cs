@@ -6,7 +6,7 @@ using Grpc.Core;
 
 namespace Daisi.Orc.Grpc.RPCServices.V1
 {
-    public class RelayInferenceRPC(ILogger<RelayInferenceRPC> logger, CreditService creditService) : InferencesProto.InferencesProtoBase
+    public class RelayInferenceRPC(ILogger<RelayInferenceRPC> logger, CreditService creditService, SecureToolService secureToolService) : InferencesProto.InferencesProtoBase
     {
         public async override Task<CreateInferenceResponse> Create(CreateInferenceRequest request, ServerCallContext context)
         {
@@ -21,6 +21,42 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 var hasFunds = await creditService.HasSufficientCreditsAsync(consumerAccountId, 1);
                 if (!hasFunds)
                     throw new RpcException(new Status(StatusCode.ResourceExhausted, "Insufficient credits."));
+            }
+
+            // Resolve the consumer's secure tools and attach them to the request
+            // The host will create session-scoped tool proxies from these definitions
+            if (!string.IsNullOrEmpty(consumerAccountId))
+            {
+                try
+                {
+                    var installedTools = await secureToolService.GetInstalledToolsAsync(consumerAccountId);
+                    foreach (var tool in installedTools)
+                    {
+                        var def = new SecureToolDefinitionInfo
+                        {
+                            MarketplaceItemId = tool.MarketplaceItemId,
+                            ToolId = tool.Tool.ToolId,
+                            Name = tool.Tool.Name,
+                            UseInstructions = tool.Tool.UseInstructions,
+                            ToolGroup = tool.Tool.ToolGroup,
+                            EndpointUrl = tool.EndpointUrl
+                        };
+                        foreach (var p in tool.Tool.Parameters)
+                        {
+                            def.Parameters.Add(new SecureToolParameterInfo
+                            {
+                                Name = p.Name,
+                                Description = p.Description,
+                                IsRequired = p.IsRequired
+                            });
+                        }
+                        request.SecureTools.Add(def);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to resolve secure tools for consumer {AccountId}", consumerAccountId);
+                }
             }
 
             return await HostContainer.SendToHostAndWaitAsync<CreateInferenceRequest, CreateInferenceResponse>(session, request);

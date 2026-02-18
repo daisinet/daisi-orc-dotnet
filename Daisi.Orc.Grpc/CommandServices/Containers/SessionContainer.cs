@@ -67,6 +67,7 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
         public bool IsExpired => (DateTime.UtcNow - DateLastInteraction).TotalSeconds > 600;
         public string CreateClientKey { get; set; }
         public string ClaimClientKey { get; set; }
+        public string? ConsumerAccountId { get; set; }
 
         public CreateSessionRequest CreateRequest { get; set; }
         public CreateSessionResponse CreateResponse { get; set; }

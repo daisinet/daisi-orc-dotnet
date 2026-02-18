@@ -7,6 +7,7 @@ using Daisi.Orc.Grpc.CommandServices.Containers;
 using Daisi.Orc.Grpc.CommandServices.Handlers;
 using Daisi.Orc.Grpc.CommandServices.HostCommandHandlers;
 using Daisi.Orc.Grpc.RPCServices.V1;
+using Daisi.Orc.Grpc.Endpoints;
 using Daisi.Orc.Grpc.Services;
 using Daisi.SDK.Extensions;
 using Daisi.SDK.Web.Services;
@@ -61,6 +62,7 @@ public partial class Program
         builder.Services.AddHostedService<UptimeCreditService>();
         builder.Services.AddHostedService<SubscriptionRenewalService>();
         builder.Services.AddHostedService<CreditAnomalyService>();
+        builder.Services.AddHostedService<ToolExecutionBillingService>();
 
         var app = App = builder.Build();
 
@@ -87,6 +89,7 @@ public partial class Program
         builder.Logging.AddDebug();
 #endif
 
+        app.MapSecureToolValidation();
         app.MapGet("/", () => "Communication with DAISI endpoints must be made through the DAISI SDK. To download a DAISI host application and/or the SDK, go to https://daisi.ai");
 
         app.UseRouting();

@@ -101,6 +101,58 @@ The ORC manages the secure tool lifecycle — install/uninstall notifications an
 
 **Provider API contract:** Providers implement four HTTP POST endpoints (`/install`, `/uninstall`, `/configure`, `/execute`) documented in the [Secure Tool API Reference](https://daisi.ai/learn/marketplace/secure-tool-api-reference).
 
+### Secure Tool Execution Validation & Billing
+
+The ORC provides a server-side validation endpoint for secure tool execution and a background billing pipeline to charge consumers for tool usage.
+
+#### Validation Endpoint
+
+`POST /api/secure-tools/validate` — Called by secure tool providers before executing a tool to verify the consumer is entitled. Accepts a JSON body `{ sessionId, toolId }` and an `X-Daisi-Auth` header containing the provider's shared secret. This endpoint does **not** use `[Authorize]` — authentication is via the `X-Daisi-Auth` shared secret stored on the marketplace item.
+
+**Validation steps:**
+1. Verifies the session exists (`DaisiSession` lookup by `sessionId`).
+2. Resolves the consumer's account from the session's `ConsumerAccountId`.
+3. Validates the provider's `X-Daisi-Auth` key matches the marketplace item's `SecureAuthKey`.
+4. Records the tool execution with a cost snapshot (`ExecutionCreditCost` from the marketplace item at time of execution).
+5. Returns `{ valid, installId, bundleInstallId }` so the provider can proceed with execution.
+
+#### Tool Execution Recording
+
+Each validated execution creates a `ToolExecutionRecord` stored in the `ToolExecutions` Cosmos container, partitioned by `ConsumerAccountId`. Key fields include:
+- `ToolId`, `InstallId`, `BundleInstallId` — tool identity
+- `ConsumerAccountId`, `SessionId` — consumer identity
+- `ExecutionCost` — snapshot of the marketplace item's `ExecutionCreditCost` at execution time
+- `TransactionId` — nullable, populated once the background billing service processes the record
+- `IsProcessed` — flag indicating whether billing has been applied
+
+#### Background Billing
+
+`ToolExecutionBillingService` is a background service that runs every 60 seconds. On each cycle it:
+1. Queries all unprocessed `ToolExecutionRecord` entries.
+2. Groups records by `ConsumerAccountId`.
+3. Creates a `ToolExecutionSpend` credit transaction for each account, debiting the sum of `ExecutionCost` values.
+4. Marks records as processed and stamps the `TransactionId`.
+
+#### New Credit Transaction Type
+
+`ToolExecutionSpend` has been added to the `CreditTransactionType` enum. This type is used exclusively by the background billing service for tool execution charges.
+
+#### Session Identity
+
+`DaisiSession` now stores a `ConsumerAccountId` field, set during `Create()`. This allows the validation endpoint to resolve the consumer's account without an additional lookup.
+
+#### Relay Inference (Secure Tools)
+
+`RelayInferenceRPC.Create()` now resolves the consumer's installed secure tools via `SecureToolService.GetInstalledToolsAsync()` and attaches them to the `CreateInferenceRequest` as `SecureTools`. The `InstallId` is stripped from the relayed definitions — it is only used server-side for validation, never sent to the inference host.
+
+#### MarketplaceItem (Execution Credit Cost)
+
+The `MarketplaceItem` model now includes an `ExecutionCreditCost` property (`long`). This value is set by tool publishers in the marketplace and represents the number of credits charged per tool execution. A value of `0` means the tool is free to execute.
+
+#### Cosmos Lookup (Secure Tool by ToolId)
+
+New query method `GetSecureToolMarketplaceItemByToolIdAsync(string toolId)` on the Cosmos repository. Looks up a marketplace item by its `SecureToolDefinition.ToolId` field, used by the validation endpoint to resolve the tool's auth key and execution cost.
+
 ### Per-Model Backend Engine & Inference Parameters
 
 The ORC stores per-model configuration in CosmosDB and serves it to hosts and the Manager UI via gRPC.
