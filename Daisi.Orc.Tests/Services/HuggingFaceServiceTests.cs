@@ -270,6 +270,8 @@ namespace Daisi.Orc.Tests.Services
                 "siblings": [
                     { "rfilename": "model.onnx", "size": 5000000000 },
                     { "rfilename": "onnx/model.onnx", "size": 3000000000 },
+                    { "rfilename": "onnx/model.onnx_data", "size": 2000000000 },
+                    { "rfilename": "cuda/model.onnx.data", "size": 1500000000 },
                     { "rfilename": "model-Q4_K_M.gguf", "size": 4200000000 },
                     { "rfilename": "README.md", "size": 1024 }
                 ]
@@ -285,8 +287,7 @@ namespace Daisi.Orc.Tests.Services
 
             Assert.True(result.Success);
             Assert.Equal(1, result.Model!.GGUFFiles.Count);
-            Assert.Equal(2, result.Model.ONNXFiles.Count);
-            Assert.All(result.Model.ONNXFiles, f => Assert.EndsWith(".onnx", f.FileName));
+            Assert.Equal(4, result.Model.ONNXFiles.Count);
         }
 
         [Fact]
