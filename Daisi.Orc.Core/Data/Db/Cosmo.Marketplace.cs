@@ -171,6 +171,26 @@ public partial class Cosmo
         return items;
     }
 
+    /// <summary>
+    /// Look up an approved secure tool marketplace item by its ToolId.
+    /// </summary>
+    public async Task<MarketplaceItem?> GetSecureToolMarketplaceItemByToolIdAsync(string toolId)
+    {
+        var container = await GetContainerAsync(MarketplaceContainerName);
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.IsSecureExecution = true AND c.SecureToolDefinition.ToolId = @toolId AND c.Status = 'Approved'")
+            .WithParameter("@toolId", toolId);
+
+        using var resultSet = container.GetItemQueryIterator<MarketplaceItem>(query);
+        while (resultSet.HasMoreResults)
+        {
+            var response = await resultSet.ReadNextAsync();
+            if (response.Count > 0)
+                return response.First();
+        }
+        return null;
+    }
+
     public async Task ClearFeaturedItemsByAccountAsync(string accountId)
     {
         var container = await GetContainerAsync(MarketplaceContainerName);

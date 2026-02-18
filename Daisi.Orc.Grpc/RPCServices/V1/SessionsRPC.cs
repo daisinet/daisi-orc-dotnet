@@ -20,6 +20,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             daisiSession.CreateRequest = request;
             daisiSession.CreateResponse = new CreateSessionResponse() { Id = daisiSession.Id };
             daisiSession.CreateClientKey = clientKey;
+            daisiSession.ConsumerAccountId = context.GetAccountId();
 
             daisiSession.CreateResponse.Host = HostContainer.GetNextHost(request, context, cosmo);
 

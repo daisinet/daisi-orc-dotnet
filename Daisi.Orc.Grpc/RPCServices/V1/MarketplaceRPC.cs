@@ -122,6 +122,7 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
         existing.IsSecureExecution = request.Item.IsSecureExecution;
         existing.SecureEndpointUrl = request.Item.SecureEndpointUrl;
         existing.SecureAuthKey = request.Item.SecureAuthKey;
+        existing.ExecutionCreditCost = request.Item.ExecutionCreditCost;
 
         if (request.Item.SetupParameters.Count > 0)
         {
@@ -665,6 +666,7 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
             IsSecureExecution = item.IsSecureExecution,
             SecureEndpointUrl = item.SecureEndpointUrl ?? string.Empty,
             SecureAuthKey = item.SecureAuthKey ?? string.Empty,
+            ExecutionCreditCost = item.ExecutionCreditCost,
             CreatedAt = Timestamp.FromDateTime(DateTime.SpecifyKind(item.CreatedAt, DateTimeKind.Utc)),
             UpdatedAt = Timestamp.FromDateTime(DateTime.SpecifyKind(item.UpdatedAt, DateTimeKind.Utc))
         };
@@ -744,7 +746,8 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
             Visibility = info.Visibility,
             IsSecureExecution = info.IsSecureExecution,
             SecureEndpointUrl = info.SecureEndpointUrl,
-            SecureAuthKey = info.SecureAuthKey
+            SecureAuthKey = info.SecureAuthKey,
+            ExecutionCreditCost = info.ExecutionCreditCost
         };
 
         if (info.SetupParameters.Count > 0)

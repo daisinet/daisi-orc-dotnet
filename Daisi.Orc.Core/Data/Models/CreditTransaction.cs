@@ -14,7 +14,8 @@ namespace Daisi.Orc.Core.Data.Models
         ProviderEarning,
         SubscriptionRenewal,
         PremiumSubscription,
-        PremiumRefund
+        PremiumRefund,
+        ToolExecutionSpend
     }
 
     public class CreditTransaction

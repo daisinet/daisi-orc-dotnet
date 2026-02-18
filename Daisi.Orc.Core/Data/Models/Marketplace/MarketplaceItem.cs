@@ -117,6 +117,12 @@ public class MarketplaceItem
     /// </summary>
     public SecureToolDefinitionData? SecureToolDefinition { get; set; }
 
+    /// <summary>
+    /// Credits charged to the consumer per tool execution. 0 = free to execute.
+    /// Providers can change this at any time; the cost is snapshotted on each execution record.
+    /// </summary>
+    public long ExecutionCreditCost { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

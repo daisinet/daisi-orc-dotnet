@@ -367,6 +367,34 @@ namespace Daisi.Orc.Core.Services
             return await cosmo.CreateCreditTransactionAsync(transaction);
         }
 
+        /// <summary>
+        /// Debit credits for tool execution billing. Returns the transaction or null if insufficient balance.
+        /// </summary>
+        public async Task<CreditTransaction?> SpendToolExecutionCreditsAsync(
+            string accountId, long totalCost, int executionCount, string description)
+        {
+            var account = await cosmo.GetOrCreateCreditAccountAsync(accountId);
+
+            if (account.Balance < totalCost)
+                return null;
+
+            account.Balance -= totalCost;
+            account.TotalSpent += totalCost;
+            await cosmo.UpdateCreditAccountBalanceAsync(account);
+
+            var transaction = new CreditTransaction
+            {
+                AccountId = accountId,
+                Type = CreditTransactionType.ToolExecutionSpend,
+                Amount = -totalCost,
+                Balance = account.Balance,
+                Description = description,
+                Multiplier = 1.0
+            };
+
+            return await cosmo.CreateCreditTransactionAsync(transaction);
+        }
+
         private static double GetUptimeBonusMultiplier(UptimeBonusTier tier)
         {
             return tier switch
