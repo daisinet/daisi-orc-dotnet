@@ -15,7 +15,7 @@ namespace Daisi.Orc.Core.Services
             try
             {
                 var client = httpClientFactory.CreateClient();
-                var apiUrl = $"https://huggingface.co/api/models/{repoId}?blobs=true&expand[]=gguf&expand[]=onnx";
+                var apiUrl = $"https://huggingface.co/api/models/{repoId}?blobs=true&expand[]=gguf";
                 var response = await client.GetAsync(apiUrl);
 
                 if (!response.IsSuccessStatusCode)
@@ -84,7 +84,9 @@ namespace Daisi.Orc.Core.Services
                                 DownloadUrl = $"https://huggingface.co/{repoId}/resolve/main/{filename}?download=true"
                             });
                         }
-                        else if (filename.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase))
+                        else if (filename.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase)
+                            || filename.EndsWith(".onnx_data", StringComparison.OrdinalIgnoreCase)
+                            || filename.EndsWith(".onnx.data", StringComparison.OrdinalIgnoreCase))
                         {
                             info.ONNXFiles.Add(new HuggingFaceONNXFileData
                             {
