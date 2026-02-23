@@ -440,6 +440,13 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
         public List<string> LoadedModelNames { get; set; } = new();
 
         /// <summary>
+        /// Model names for which a DownloadModelRequest has already been sent.
+        /// Prevents re-sending every heartbeat while the host is still downloading.
+        /// Cleared when the model appears in <see cref="LoadedModelNames"/>.
+        /// </summary>
+        public HashSet<string> PendingModelDownloads { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
         /// Key is the ID for the session that will receive these outgoing commands.
         /// These going to consumers in a session.
         /// </summary>
