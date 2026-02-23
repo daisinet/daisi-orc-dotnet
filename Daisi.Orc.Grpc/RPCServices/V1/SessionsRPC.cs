@@ -47,8 +47,8 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             {
                 HostContainer.HostsOnline.TryGetValue(session.CreateResponse.Host.Id, out var hostOnline);
 
-                hostOnline.CloseSession(session.Id);
                 SessionContainer.Close(session.Id);
+                hostOnline.CloseSession(session.Id);
 
                 return new CloseSessionResponse() { Success = true };
             }

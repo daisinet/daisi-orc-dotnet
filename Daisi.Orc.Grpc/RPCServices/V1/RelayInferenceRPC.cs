@@ -25,7 +25,8 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
 
             // Resolve the consumer's secure tools and attach them to the request
             // The host will create session-scoped tool proxies from these definitions
-            if (!string.IsNullOrEmpty(consumerAccountId))
+            // Only attach tools for think levels that support tool use (not Basic)
+            if (!string.IsNullOrEmpty(consumerAccountId) && request.ThinkLevel != ThinkLevels.Basic)
             {
                 try
                 {
