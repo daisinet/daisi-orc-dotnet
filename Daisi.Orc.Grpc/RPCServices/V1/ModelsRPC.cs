@@ -4,6 +4,7 @@ using Daisi.Orc.Core.Services;
 using Daisi.Orc.Grpc.Authentication;
 using Daisi.Orc.Grpc.CommandServices.Containers;
 using Daisi.Protos.V1;
+using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.AspNetCore.Authorization;
 
@@ -26,6 +27,10 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
         public async override Task<CreateModelResponse> CreateModel(CreateModelRequest request, ServerCallContext context)
         {
             var dbModel = request.Model.ConvertToDb();
+
+            if (dbModel.IsDefault)
+                await ClearOverlappingDefaultsAsync(dbModel);
+
             dbModel = await cosmo.CreateModelAsync(dbModel);
 
             return new CreateModelResponse { Model = dbModel.ConvertToProto() };
@@ -61,6 +66,10 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
 
             var dbModel = request.Model.ConvertToDb();
             dbModel.CreatedAt = existing.CreatedAt;
+
+            if (dbModel.IsDefault)
+                await ClearOverlappingDefaultsAsync(dbModel);
+
             dbModel = await cosmo.UpdateModelAsync(dbModel);
 
             return new UpdateModelResponse { Model = dbModel.ConvertToProto() };
@@ -69,7 +78,37 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
         [Authorize]
         public async override Task<DeleteModelResponse> DeleteModel(DeleteModelRequest request, ServerCallContext context)
         {
+            // Fetch the model before deleting so we can broadcast removal details
+            var model = await cosmo.GetModelAsync(request.Id);
+
             var success = await cosmo.DeleteModelAsync(request.Id);
+
+            if (success && model is not null)
+            {
+                // Broadcast RemoveModelRequest to all connected hosts
+                var removeRequest = new RemoveModelRequest
+                {
+                    ModelId = model.Id,
+                    ModelName = model.Name ?? string.Empty,
+                    FileName = model.FileName ?? string.Empty
+                };
+
+                var removeCommand = new Command
+                {
+                    Name = nameof(RemoveModelRequest),
+                    Payload = Any.Pack(removeRequest)
+                };
+
+                foreach (var hostOnline in HostContainer.HostsOnline.Values)
+                {
+                    hostOnline.OutgoingQueue.Writer.TryWrite(removeCommand);
+                    hostOnline.PendingModelDownloads.Remove(model.Name);
+                }
+
+                logger.LogInformation("Broadcasted RemoveModelRequest for '{ModelName}' to {Count} host(s)",
+                    model.Name, HostContainer.HostsOnline.Count);
+            }
+
             return new DeleteModelResponse { Success = success };
         }
 
@@ -152,6 +191,32 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             }
 
             return response;
+        }
+
+        /// <summary>
+        /// Clears IsDefault on other models that share any of the same types as the given model.
+        /// This allows multiple models to each be default for different types without conflict.
+        /// </summary>
+        private async Task ClearOverlappingDefaultsAsync(DaisiModel model)
+        {
+            var allModels = await cosmo.GetAllModelsAsync();
+            var modelTypes = model.Types.Count > 0 ? model.Types.ToHashSet() : new HashSet<int> { model.Type };
+
+            foreach (var other in allModels)
+            {
+                if (other.Id == model.Id || !other.IsDefault)
+                    continue;
+
+                var otherTypes = other.Types.Count > 0 ? other.Types.ToHashSet() : new HashSet<int> { other.Type };
+
+                if (otherTypes.Overlaps(modelTypes))
+                {
+                    other.IsDefault = false;
+                    await cosmo.UpdateModelAsync(other);
+                    logger.LogInformation("Cleared IsDefault on model '{ModelName}' (overlapping types with '{NewDefault}')",
+                        other.Name, model.Name);
+                }
+            }
         }
 
         [Authorize]

@@ -4,9 +4,11 @@ using Daisi.Orc.Core.Services;
 using Daisi.Orc.Grpc.Authentication;
 using Daisi.Orc.Grpc.CommandServices.Containers;
 using Daisi.Orc.Grpc.CommandServices.Interfaces;
+using Daisi.Orc.Grpc.RPCServices.V1;
 using Daisi.Protos.V1;
 using Daisi.SDK.Interfaces;
 using Daisi.SDK.Models;
+using Google.Protobuf.WellKnownTypes;
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 
@@ -80,8 +82,51 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
             }
 
             logger.LogInformation($"Handled Heartbeat for {hostOnline.Host.Name} at {DateTime.UtcNow} from IP {ip}");
+
+            // Model sync: send DownloadModelRequest for any required models the host doesn't have yet
+            try
+            {
+                await SyncRequiredModelsAsync(hostOnline, responseQueue);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Model sync failed for host {HostName}", hostOnline.Host.Name);
+            }
         }
 
-    
+        /// <summary>
+        /// Compares the ORC's enabled models with what the host reports as loaded,
+        /// and sends DownloadModelRequest for any missing models.
+        /// </summary>
+        private async Task SyncRequiredModelsAsync(HostOnline hostOnline, ChannelWriter<Command> responseQueue)
+        {
+            var enabledModels = await cosmo.GetEnabledModelsAsync();
+            var loadedNames = new HashSet<string>(hostOnline.LoadedModelNames, StringComparer.OrdinalIgnoreCase);
+
+            // Clear pending downloads for models that have now loaded
+            hostOnline.PendingModelDownloads.RemoveWhere(name => loadedNames.Contains(name));
+
+            foreach (var dbModel in enabledModels)
+            {
+                if (loadedNames.Contains(dbModel.Name))
+                    continue;
+
+                if (hostOnline.PendingModelDownloads.Contains(dbModel.Name))
+                    continue;
+
+                var protoModel = dbModel.ConvertToProto();
+                var downloadRequest = new DownloadModelRequest { Model = protoModel };
+
+                responseQueue.TryWrite(new Command
+                {
+                    Name = nameof(DownloadModelRequest),
+                    Payload = Any.Pack(downloadRequest)
+                });
+
+                hostOnline.PendingModelDownloads.Add(dbModel.Name);
+                logger.LogInformation("Sent DownloadModelRequest for '{ModelName}' to host '{HostName}'",
+                    dbModel.Name, hostOnline.Host.Name);
+            }
+        }
     }
 }

@@ -23,6 +23,22 @@ isn't leaving the local network, but SSL is still recommended even for private n
 }
 ```
 
+### Model Management
+
+The ORC manages AI models across the network. Models are stored in Cosmos DB and synced to hosts automatically.
+
+#### Hot-Reload via Heartbeat
+
+During each heartbeat, `HeartbeatRequestCommandHandler` compares the ORC's enabled models with the host's reported loaded models. For any missing model, a `DownloadModelRequest` command is sent over the existing gRPC stream. Pending downloads are tracked in `HostOnline.PendingModelDownloads` to avoid re-sending every 60 seconds.
+
+#### Model Deletion Broadcast
+
+When a model is deleted via `ModelsRPC.DeleteModel`, the ORC broadcasts a `RemoveModelRequest` to all connected hosts. Hosts unload the model, remove it from settings, and delete the file from their `required/` folder.
+
+#### Default Model Per Type
+
+When saving a model with `IsDefault=true`, the ORC only clears `IsDefault` on other models that share overlapping types. This allows multiple models to each be the default for different types (e.g., one default for TextGeneration, another for ImageGeneration).
+
 ### Inference Receipt Processing
 
 When a host sends an `InferenceReceipt`, the ORC's `InferenceReceiptCommandHandler` processes it in two stages:
