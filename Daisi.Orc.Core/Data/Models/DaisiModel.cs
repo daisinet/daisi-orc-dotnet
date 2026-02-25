@@ -47,5 +47,6 @@ namespace Daisi.Orc.Core.Data.Models
         public int? TopK { get; set; }
         public float? RepeatPenalty { get; set; }
         public float? PresencePenalty { get; set; }
+        public string? PromptFormat { get; set; }
     }
 }
