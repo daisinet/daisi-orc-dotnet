@@ -95,6 +95,15 @@ namespace Daisi.Orc.Core.Services
                                 DownloadUrl = $"https://huggingface.co/{repoId}/resolve/main/{filename}?download=true"
                             });
                         }
+                        else if (filename.EndsWith(".safetensors", StringComparison.OrdinalIgnoreCase))
+                        {
+                            info.SafetensorFiles.Add(new HuggingFaceSafetensorFileData
+                            {
+                                FileName = filename,
+                                SizeBytes = size,
+                                DownloadUrl = $"https://huggingface.co/{repoId}/resolve/main/{filename}?download=true"
+                            });
+                        }
                     }
                 }
 
@@ -162,6 +171,7 @@ namespace Daisi.Orc.Core.Services
         public uint ContextLength { get; set; }
         public List<HuggingFaceGGUFFileData> GGUFFiles { get; set; } = new();
         public List<HuggingFaceONNXFileData> ONNXFiles { get; set; } = new();
+        public List<HuggingFaceSafetensorFileData> SafetensorFiles { get; set; } = new();
     }
 
     public class HuggingFaceGGUFFileData
@@ -173,6 +183,13 @@ namespace Daisi.Orc.Core.Services
     }
 
     public class HuggingFaceONNXFileData
+    {
+        public string FileName { get; set; } = "";
+        public long SizeBytes { get; set; }
+        public string DownloadUrl { get; set; } = "";
+    }
+
+    public class HuggingFaceSafetensorFileData
     {
         public string FileName { get; set; } = "";
         public long SizeBytes { get; set; }

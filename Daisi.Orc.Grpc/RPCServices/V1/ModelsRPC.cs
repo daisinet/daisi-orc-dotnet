@@ -158,6 +158,16 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                     });
                 }
 
+                foreach (var file in result.Model.SafetensorFiles)
+                {
+                    info.SafetensorFiles.Add(new HuggingFaceSafetensorFile
+                    {
+                        FileName = file.FileName,
+                        SizeBytes = file.SizeBytes,
+                        DownloadUrl = file.DownloadUrl
+                    });
+                }
+
                 response.Model = info;
             }
 
