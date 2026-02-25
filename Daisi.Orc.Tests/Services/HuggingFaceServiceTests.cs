@@ -319,6 +319,43 @@ namespace Daisi.Orc.Tests.Services
         }
 
         [Fact]
+        public async Task LookupModelAsync_ValidResponse_DetectsSafetensorFiles()
+        {
+            var json = """
+            {
+                "pipeline_tag": "text-to-image",
+                "downloads": 500000,
+                "likes": 8000,
+                "tags": ["diffusers", "safetensors", "stable-diffusion"],
+                "siblings": [
+                    { "rfilename": "v1-5-pruned-emaonly.safetensors", "size": 4265380512 },
+                    { "rfilename": "v1-5-pruned.safetensors", "size": 7703810048 },
+                    { "rfilename": "model-Q4_K_M.gguf", "size": 4200000000 },
+                    { "rfilename": "README.md", "size": 1024 },
+                    { "rfilename": "config.json", "size": 512 }
+                ]
+            }
+            """;
+
+            var handler = new FakeHttpMessageHandler(System.Net.HttpStatusCode.OK, json);
+            var httpClientFactory = new TestHttpClientFactory(handler);
+            var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<HuggingFaceService>.Instance;
+            var service = new HuggingFaceService(httpClientFactory, logger);
+
+            var result = await service.LookupModelAsync("https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5");
+
+            Assert.True(result.Success);
+            Assert.Equal(2, result.Model!.SafetensorFiles.Count);
+            Assert.All(result.Model.SafetensorFiles, f => Assert.EndsWith(".safetensors", f.FileName));
+            Assert.Equal(1, result.Model.GGUFFiles.Count);
+
+            var safetensorFile = result.Model.SafetensorFiles[0];
+            Assert.Equal("v1-5-pruned-emaonly.safetensors", safetensorFile.FileName);
+            Assert.Equal(4265380512, safetensorFile.SizeBytes);
+            Assert.Equal("https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors?download=true", safetensorFile.DownloadUrl);
+        }
+
+        [Fact]
         public async Task LookupModelAsync_NoONNXFiles_ReturnsEmptyList()
         {
             var json = """
