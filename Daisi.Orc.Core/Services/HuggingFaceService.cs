@@ -67,10 +67,10 @@ namespace Daisi.Orc.Core.Services
                         var filename = rfilename.GetString() ?? "";
 
                         long size = 0;
-                        if (sibling.TryGetProperty("size", out var sizeEl))
-                            size = sizeEl.GetInt64();
-                        else if (sibling.TryGetProperty("lfs", out var lfs) && lfs.TryGetProperty("size", out var lfsSize))
+                        if (sibling.TryGetProperty("lfs", out var lfs) && lfs.TryGetProperty("size", out var lfsSize) && lfsSize.ValueKind == JsonValueKind.Number)
                             size = lfsSize.GetInt64();
+                        else if (sibling.TryGetProperty("size", out var sizeEl) && sizeEl.ValueKind == JsonValueKind.Number)
+                            size = sizeEl.GetInt64();
 
                         if (filename.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase))
                         {
