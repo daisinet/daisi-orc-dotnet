@@ -311,7 +311,8 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                         SkipCheck = model.Backend.SkipCheck,
                         LlamaPath = model.Backend.LlamaPath ?? string.Empty,
                         LlavaPath = model.Backend.LlavaPath ?? string.Empty,
-                        BackendEngine = model.Backend.BackendEngine ?? string.Empty
+                        BackendEngine = model.Backend.BackendEngine ?? string.Empty,
+                        PromptFormat = model.Backend.PromptFormat ?? string.Empty
                     };
 
                     if (model.Backend.Temperature.HasValue)
@@ -372,7 +373,8 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                         TopP = proto.Backend.HasTopP ? proto.Backend.TopP : null,
                         TopK = proto.Backend.HasTopK ? proto.Backend.TopK : null,
                         RepeatPenalty = proto.Backend.HasRepeatPenalty ? proto.Backend.RepeatPenalty : null,
-                        PresencePenalty = proto.Backend.HasPresencePenalty ? proto.Backend.PresencePenalty : null
+                        PresencePenalty = proto.Backend.HasPresencePenalty ? proto.Backend.PresencePenalty : null,
+                        PromptFormat = string.IsNullOrWhiteSpace(proto.Backend.PromptFormat) ? null : proto.Backend.PromptFormat
                     };
                 }
 
