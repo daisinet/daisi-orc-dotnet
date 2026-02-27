@@ -38,6 +38,7 @@ public partial class Program
         builder.Services.AddScoped<CreditService>();
         builder.Services.AddScoped<MarketplaceService>();
         builder.Services.AddScoped<SecureToolService>();
+        builder.Services.AddScoped<McpService>();
         builder.Services.AddHttpClient();
         builder.Services.AddSingleton<GitHubReleaseService>();
         builder.Services.AddHttpClient();
@@ -63,6 +64,7 @@ public partial class Program
         builder.Services.AddHostedService<SubscriptionRenewalService>();
         builder.Services.AddHostedService<CreditAnomalyService>();
         builder.Services.AddHostedService<ToolExecutionBillingService>();
+        builder.Services.AddHostedService<McpSyncSchedulerService>();
 
         var app = App = builder.Build();
 
@@ -84,6 +86,7 @@ public partial class Program
         app.MapGrpcService<MarketplaceRPC>();
         app.MapGrpcService<SecureToolRPC>();
         app.MapGrpcService<BlogsRPC>();
+        app.MapGrpcService<McpRPC>();
 
 #if DEBUG
         builder.Logging.AddDebug();
