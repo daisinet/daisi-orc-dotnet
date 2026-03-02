@@ -204,6 +204,15 @@ The ORC manages MCP (Model Context Protocol) server registrations, enabling acco
 
 **Drive host notifications:** `HostContainer.NotifyDriveHostOnlineAsync()` now includes the host's IP address and port so Drive Manager can make direct gRPC calls for vector search.
 
+### CheckUserExists RPC
+
+`AuthRPC.CheckUserExists` is an `[AllowAnonymous]` endpoint that checks whether a user account exists for a given email address. This supports CRM landing page flows where unauthenticated visitors need to be routed to login vs. signup.
+
+**Request:** `CheckUserExistsRequest { Email }`
+**Response:** `CheckUserExistsResponse { Exists }`
+
+The implementation queries Cosmos DB via `Cosmo.GetUserByEmailOrPhoneAsync()` and returns a boolean.
+
 ### Project - Daisi.Orc.Core
 This is the core library that contains various interfaces and a CosmoDb repository, which is used by default. Abstraction for other databases and repository types is planned, but not yet implemented.
 
