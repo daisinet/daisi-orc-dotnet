@@ -80,7 +80,8 @@ namespace Daisi.Orc.Tests.Models
             Assert.Contains(CreditTransactionType.SubscriptionRenewal, values);
             Assert.Contains(CreditTransactionType.PremiumSubscription, values);
             Assert.Contains(CreditTransactionType.PremiumRefund, values);
-            Assert.Equal(10, values.Length);
+            Assert.Contains(CreditTransactionType.ToolExecutionSpend, values);
+            Assert.Equal(11, values.Length);
         }
 
         #endregion
