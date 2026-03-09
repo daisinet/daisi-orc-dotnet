@@ -1,5 +1,6 @@
 using Daisi.Orc.Core.Data.Db;
 using Daisi.Orc.Core.Data.Models.Skills;
+using Daisi.Orc.Grpc.Authentication;
 using Daisi.Protos.V1;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
@@ -12,7 +13,9 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
     {
         public override async Task<GetSkillsByAccountResponse> GetSkillsByAccount(GetSkillsByAccountRequest request, ServerCallContext context)
         {
-            var skills = await cosmo.GetSkillsByAccountAsync(request.AccountId);
+            var accountId = context.GetAccountId()
+                ?? throw new RpcException(new Status(StatusCode.Unauthenticated, "Could not resolve account."));
+            var skills = await cosmo.GetSkillsByAccountAsync(accountId);
             var response = new GetSkillsByAccountResponse();
             foreach (var skill in skills)
             {
@@ -32,9 +35,11 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
 
         public override async Task<CreateSkillResponse> CreateSkill(CreateSkillRequest request, ServerCallContext context)
         {
+            var accountId = context.GetAccountId()
+                ?? throw new RpcException(new Status(StatusCode.Unauthenticated, "Could not resolve account."));
             var skill = new Skill
             {
-                AccountId = request.AccountId,
+                AccountId = accountId,
                 Name = request.Name,
                 Description = request.Description,
                 ShortDescription = request.ShortDescription,

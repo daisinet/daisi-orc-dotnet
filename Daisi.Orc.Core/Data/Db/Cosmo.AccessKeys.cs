@@ -201,6 +201,38 @@ namespace Daisi.Orc.Core.Data.Db
             }
             return results;
         }
+        /// <summary>
+        /// Deletes all client keys whose DateExpires is in the past.
+        /// Returns the number of keys deleted.
+        /// </summary>
+        public async Task<int> DeleteExpiredClientKeysAsync()
+        {
+            var container = await GetContainerAsync(AccessKeyContainerName);
+            var now = DateTime.UtcNow;
+
+            var query = new QueryDefinition(
+                "SELECT c.id FROM c WHERE c.DateExpires != null AND c.DateExpires < @now")
+                .WithParameter("@now", now);
+
+            var options = new QueryRequestOptions { PartitionKey = new PartitionKey(KeyTypes.Client.Name) };
+            var iterator = container.GetItemQueryIterator<IdOnly>(query, requestOptions: options);
+
+            var deletedCount = 0;
+            while (iterator.HasMoreResults)
+            {
+                var batch = await iterator.ReadNextAsync();
+                foreach (var item in batch)
+                {
+                    await container.DeleteItemAsync<AccessKey>(item.Id, new PartitionKey(KeyTypes.Client.Name));
+                    deletedCount++;
+                }
+            }
+
+            return deletedCount;
+        }
+
+        private record IdOnly([property: System.Text.Json.Serialization.JsonPropertyName("id")] string Id);
+
         public async Task PatchKeyOwnerName(PartitionKeyStub key, string ownerName)
         {
             List<PatchOperation> patchOperations = new List<PatchOperation>()

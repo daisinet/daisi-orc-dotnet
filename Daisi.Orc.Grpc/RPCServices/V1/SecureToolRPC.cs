@@ -1,4 +1,5 @@
 using Daisi.Orc.Core.Services;
+using Daisi.Orc.Grpc.Authentication;
 using Daisi.Protos.V1;
 using Grpc.Core;
 using Microsoft.AspNetCore.Authorization;
@@ -19,9 +20,11 @@ public class SecureToolRPC(ILogger<SecureToolRPC> logger, SecureToolService secu
     /// </summary>
     public override async Task<GetInstalledSecureToolsResponse> GetInstalledSecureTools(GetInstalledSecureToolsRequest request, ServerCallContext context)
     {
-        logger.LogInformation("SecureTool GetInstalled: AccountId={AccountId}", request.AccountId);
+        var accountId = context.GetAccountId()
+            ?? throw new RpcException(new Status(StatusCode.Unauthenticated, "Could not resolve account."));
+        logger.LogInformation("SecureTool GetInstalled: AccountId={AccountId}", accountId);
 
-        var tools = await secureToolService.GetInstalledToolsAsync(request.AccountId);
+        var tools = await secureToolService.GetInstalledToolsAsync(accountId);
 
         var response = new GetInstalledSecureToolsResponse();
         foreach (var installed in tools)

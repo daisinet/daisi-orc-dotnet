@@ -29,6 +29,26 @@ namespace Daisi.Orc.Core.Data.Db
         {
             return new PartitionKey(accountId);
         }
+        /// <summary>
+        /// Cross-partition lookup of a user by ID. Returns null if not found.
+        /// </summary>
+        public async Task<Models.User?> GetUserByIdAsync(string userId)
+        {
+            var container = await GetContainerAsync(AccountsContainerName);
+            var query = new QueryDefinition("SELECT * FROM c WHERE c.type = @type AND c.id = @userId")
+                .WithParameter("@type", "User")
+                .WithParameter("@userId", userId);
+
+            using var resultSet = container.GetItemQueryIterator<Models.User>(query);
+            while (resultSet.HasMoreResults)
+            {
+                var response = await resultSet.ReadNextAsync();
+                if (response.Count > 0)
+                    return response.First();
+            }
+            return null;
+        }
+
         public virtual async Task<bool> UserAllowedToLogin(string userId)
         {
             var container = await GetContainerAsync(AccountsContainerName);

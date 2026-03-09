@@ -5,7 +5,7 @@ namespace Daisi.Orc.Grpc.Authentication
 {
     public class OrcOnlyAttribute : TypeFilterAttribute
     {
-        public OrcOnlyAttribute() : base(typeof(HostFilter))
+        public OrcOnlyAttribute() : base(typeof(OrcFilter))
         {
         }
     }
