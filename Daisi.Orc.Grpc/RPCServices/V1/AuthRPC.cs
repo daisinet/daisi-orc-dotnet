@@ -298,6 +298,13 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             return response;
         }
 
+        [AllowAnonymous]
+        public async override Task<CheckUserExistsResponse> CheckUserExists(CheckUserExistsRequest request, ServerCallContext context)
+        {
+            var user = await cosmo.GetUserByEmailOrPhoneAsync(request.Email);
+            return new CheckUserExistsResponse { Exists = user is not null };
+        }
+
         private void TrackBotInstall(ValidateAuthCodeRequest request, Core.Data.Models.User user)
         {
             if (string.IsNullOrWhiteSpace(request.BotVersion))

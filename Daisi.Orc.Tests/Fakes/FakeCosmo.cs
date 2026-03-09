@@ -19,6 +19,7 @@ namespace Daisi.Orc.Tests.Fakes
         public List<HostRelease> Releases { get; } = new();
         public List<CreditAnomaly> CreditAnomalies { get; } = new();
         public List<Host> Hosts { get; } = new();
+        public List<McpServerRecord> McpServers { get; } = new();
 
         public FakeCosmo() : base(new ConfigurationBuilder().Build(), "unused")
         {
@@ -228,6 +229,65 @@ namespace Daisi.Orc.Tests.Fakes
             anomaly.DateReviewed = DateTime.UtcNow;
             anomaly.ReviewedBy = reviewedBy;
             return Task.FromResult(anomaly);
+        }
+
+        // ========== MCP Server Methods ==========
+
+        public override Task<McpServerRecord> CreateMcpServerAsync(McpServerRecord server)
+        {
+            server.Id = GenerateId(McpServerIdPrefix);
+            server.DateCreated = DateTime.UtcNow;
+            McpServers.Add(server);
+            return Task.FromResult(server);
+        }
+
+        public override Task<McpServerRecord?> GetMcpServerAsync(string serverId, string accountId)
+        {
+            var server = McpServers.FirstOrDefault(s => s.Id == serverId && s.AccountId == accountId);
+            return Task.FromResult(server);
+        }
+
+        public override Task<List<McpServerRecord>> GetMcpServersByAccountAsync(string accountId)
+        {
+            return Task.FromResult(McpServers.Where(s => s.AccountId == accountId).ToList());
+        }
+
+        public override Task<McpServerRecord> UpdateMcpServerAsync(McpServerRecord server)
+        {
+            var idx = McpServers.FindIndex(s => s.Id == server.Id);
+            if (idx >= 0)
+                McpServers[idx] = server;
+            return Task.FromResult(server);
+        }
+
+        public override Task DeleteMcpServerAsync(string serverId, string accountId)
+        {
+            McpServers.RemoveAll(s => s.Id == serverId && s.AccountId == accountId);
+            return Task.CompletedTask;
+        }
+
+        public override Task<List<McpServerRecord>> GetServersDueForSyncAsync()
+        {
+            var now = DateTime.UtcNow;
+            var due = McpServers
+                .Where(s => s.Status == "CONNECTED" || s.Status == "PENDING")
+                .Where(s => !s.DateLastSync.HasValue || (now - s.DateLastSync.Value).TotalMinutes >= s.SyncIntervalMinutes)
+                .ToList();
+            return Task.FromResult(due);
+        }
+
+        public override Task PatchMcpServerStatusAsync(string serverId, string accountId, string status,
+            DateTime? dateLastSync = null, string? lastError = null, int? resourcesSynced = null)
+        {
+            var server = McpServers.FirstOrDefault(s => s.Id == serverId && s.AccountId == accountId);
+            if (server != null)
+            {
+                server.Status = status;
+                if (dateLastSync.HasValue) server.DateLastSync = dateLastSync;
+                if (lastError != null) server.LastError = lastError;
+                if (resourcesSynced.HasValue) server.ResourcesSynced = resourcesSynced.Value;
+            }
+            return Task.CompletedTask;
         }
     }
 }

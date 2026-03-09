@@ -184,6 +184,35 @@ The ORC stores per-model configuration in CosmosDB and serves it to hosts and th
 
 **HuggingFace ONNX Detection:** The `HuggingFaceService` now queries the HuggingFace API with `expand[]=onnx` and parses `.onnx` files from the siblings list, returning them in a separate `ONNXFiles` collection alongside GGUF files.
 
+### MCP Server Management
+
+The ORC manages MCP (Model Context Protocol) server registrations, enabling accounts to connect external data sources (databases, APIs, file systems) and automatically sync their data into DAISI Drive for RAG-powered search.
+
+**Key components:**
+
+- **`McpService`** (`Daisi.Orc.Core/Services/`) — Business logic for MCP server lifecycle: registration (with optional auto-creation of a Drive repository), removal, updates, and sync dispatch.
+- **`McpRPC`** (`Daisi.Orc.Grpc/RPCServices/V1/`) — gRPC service implementing `McpProto.McpProtoBase` with 9 RPCs: RegisterServer, UpdateServer, RemoveServer, ListServers, GetServer, DiscoverResources, ToggleResourceSync, TriggerSync, GetSyncStatus.
+- **`Cosmo.Mcp.cs`** (`Daisi.Orc.Core/Data/Db/`) — Cosmos DB data layer for MCP server configs. Container: `McpServers`, partitioned by `AccountId`.
+- **`McpSyncSchedulerService`** (`Daisi.Orc.Grpc/Background/`) — Background service that checks every 5 minutes for servers past their sync interval and dispatches `McpSyncRequest` commands to available hosts.
+
+**Sync flow:**
+1. User registers an MCP server via Manager UI or SDK
+2. The scheduler detects servers due for sync
+3. A `McpSyncRequest` command is sent to an available host
+4. The host connects to the MCP server, reads resources, uploads to Drive
+5. The ORC updates `LastSyncAt` and `Status` on the server config
+
+**Drive host notifications:** `HostContainer.NotifyDriveHostOnlineAsync()` now includes the host's IP address and port so Drive Manager can make direct gRPC calls for vector search.
+
+### CheckUserExists RPC
+
+`AuthRPC.CheckUserExists` is an `[AllowAnonymous]` endpoint that checks whether a user account exists for a given email address. This supports CRM landing page flows where unauthenticated visitors need to be routed to login vs. signup.
+
+**Request:** `CheckUserExistsRequest { Email }`
+**Response:** `CheckUserExistsResponse { Exists }`
+
+The implementation queries Cosmos DB via `Cosmo.GetUserByEmailOrPhoneAsync()` and returns a boolean.
+
 ### Project - Daisi.Orc.Core
 This is the core library that contains various interfaces and a CosmoDb repository, which is used by default. Abstraction for other databases and repository types is planned, but not yet implemented.
 
