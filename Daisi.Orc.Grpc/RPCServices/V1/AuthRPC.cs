@@ -52,10 +52,31 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
 
             if (!string.IsNullOrWhiteSpace(request.OwnerId))
             {
-                owner = new AccessKeyOwner();
-                owner.Id = request.OwnerId;
-                owner.Name = request.OwnerName;
-                owner.SystemRole = request.OwnerRole;
+                // Only allow creating client keys for Users via OwnerId override.
+                // Non-User roles (HostDevice, App, Orc) must inherit from the secret key.
+                if (request.OwnerRole != SystemRoles.User)
+                    throw new RpcException(new Status(StatusCode.PermissionDenied,
+                        "Client key owner override is only allowed for User role."));
+
+                var user = await cosmo.GetUserByIdAsync(request.OwnerId);
+                if (user is null)
+                    throw new RpcException(new Status(StatusCode.NotFound,
+                        "User not found."));
+
+                // Verify the user belongs to the same account as the secret key
+                if (secretKey.Owner?.AccountId is not null && user.AccountId != secretKey.Owner.AccountId)
+                    throw new RpcException(new Status(StatusCode.PermissionDenied,
+                        "User does not belong to the same account as the secret key."));
+
+                owner = new AccessKeyOwner
+                {
+                    Id = user.Id,
+                    Name = user.Name,
+                    AccountId = user.AccountId,
+                    SystemRole = SystemRoles.User,
+                    AllowedToLogin = user.AllowedToLogin,
+                    Role = user.Role
+                };
             }
 
             var clientKey = await cosmo.CreateClientKeyAsync(secretKey,
@@ -70,7 +91,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             else
                 response.KeyExpiration = null;
 
-            logger.LogInformation($"Client Key Produced: {response.ClientKey}");
+            logger.LogInformation("Client key produced for owner {OwnerId}", response.OwnerId);
 
             return response;
         }
@@ -81,17 +102,6 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             (ValidateClientKeyResponse response, AccessKey key) response = (new ValidateClientKeyResponse(), null);
 
             response = await ValidateClientKeyWithSecretKey(request.ClientKey, request.SecretKey);
-
-            if (response.response.IsValid
-                && response.response.KeyExpiration is not null
-                && response.response.KeyExpiration.ToDateTime() < DateTime.UtcNow.AddMinutes(30)
-                && response.key is not null)
-            {
-                var keyRes = await cosmo.SetKeyTTLAsync(response.key, 60);
-                response.response.KeyExpiration = Timestamp.FromDateTime(DateTime.UtcNow.AddMinutes(60));
-
-
-            }
 
             if (response.key is not null && response.response.IsValid && response.key.Owner.SystemRole == SystemRoles.User)
             {
@@ -179,7 +189,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             });
 
 
-            logger.LogInformation($"Auth code sent to {request.EmailOrPhone}: {user.AuthCode}");
+            logger.LogInformation("Auth code sent to {EmailOrPhone}", request.EmailOrPhone);
 
             response.Success = true;
             return response;
@@ -211,7 +221,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 response.ErrorMessage = "Invalid or expired authentication code.";
                 return response;
             }
-            logger.LogInformation($"Auth code validated for {request.EmailOrPhone}: {request.AuthCode}");
+            logger.LogInformation("Auth code validated for {EmailOrPhone}", request.EmailOrPhone);
 
             /// Create the client key with the app key if provided
             if (!string.IsNullOrWhiteSpace(request.AppId))

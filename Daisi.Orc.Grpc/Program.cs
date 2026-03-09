@@ -65,6 +65,7 @@ public partial class Program
         builder.Services.AddHostedService<CreditAnomalyService>();
         builder.Services.AddHostedService<ToolExecutionBillingService>();
         builder.Services.AddHostedService<McpSyncSchedulerService>();
+        builder.Services.AddHostedService<ExpiredKeyCleanupService>();
 
         var app = App = builder.Build();
 

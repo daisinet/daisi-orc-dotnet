@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Daisi.Orc.Core.Data.Db;
 using Daisi.Orc.Core.Data.Models.Marketplace;
 using Daisi.Orc.Core.Services;
+using Daisi.Orc.Grpc.Authentication;
 using Daisi.Protos.V1;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
@@ -59,10 +60,14 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
 
     public override async Task<CreateMarketplaceItemResponse> CreateMarketplaceItem(CreateMarketplaceItemRequest request, ServerCallContext context)
     {
+        var accountId = context.GetAccountId()
+            ?? throw new RpcException(new Status(StatusCode.Unauthenticated, "Could not resolve account."));
+        request.Item.AccountId = accountId;
+
         // Enforce premium requirement for paid items
         if (request.Item.PricingModel != MarketplacePricingModel.MarketplacePricingFree)
         {
-            var provider = await cosmo.GetProviderProfileAsync(request.Item.AccountId);
+            var provider = await cosmo.GetProviderProfileAsync(accountId);
             if (provider is null || !provider.IsPremium)
                 throw new RpcException(new Status(StatusCode.FailedPrecondition, "Only Premium providers can set a price on items"));
         }
@@ -216,7 +221,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
 
     public override async Task<PurchaseMarketplaceItemResponse> PurchaseMarketplaceItem(PurchaseMarketplaceItemRequest request, ServerCallContext context)
     {
-        var (success, error, purchase) = await marketplaceService.PurchaseItemAsync(request.AccountId, request.MarketplaceItemId);
+        var accountId = context.GetAccountId()
+            ?? throw new RpcException(new Status(StatusCode.Unauthenticated, "Could not resolve account."));
+        var (success, error, purchase) = await marketplaceService.PurchaseItemAsync(accountId, request.MarketplaceItemId);
 
         var response = new PurchaseMarketplaceItemResponse
         {
@@ -232,7 +239,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
 
     public override async Task<GetMyPurchasesResponse> GetMyPurchases(GetMyPurchasesRequest request, ServerCallContext context)
     {
-        var purchases = await cosmo.GetPurchasesByAccountAsync(request.AccountId);
+        var accountId = context.GetAccountId()
+            ?? throw new RpcException(new Status(StatusCode.Unauthenticated, "Could not resolve account."));
+        var purchases = await cosmo.GetPurchasesByAccountAsync(accountId);
         var response = new GetMyPurchasesResponse();
         foreach (var purchase in purchases)
         {
@@ -243,7 +252,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
 
     public override async Task<CheckEntitlementResponse> CheckEntitlement(CheckEntitlementRequest request, ServerCallContext context)
     {
-        var isEntitled = await marketplaceService.CheckEntitlementAsync(request.AccountId, request.MarketplaceItemId);
+        var accountId = context.GetAccountId()
+            ?? throw new RpcException(new Status(StatusCode.Unauthenticated, "Could not resolve account."));
+        var isEntitled = await marketplaceService.CheckEntitlementAsync(accountId, request.MarketplaceItemId);
         return new CheckEntitlementResponse { IsEntitled = isEntitled };
     }
 
@@ -251,7 +262,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
 
     public override async Task<GetProviderProfileResponse> GetProviderProfile(GetProviderProfileRequest request, ServerCallContext context)
     {
-        var profile = await cosmo.GetProviderProfileAsync(request.AccountId);
+        var accountId = context.GetAccountId()
+            ?? throw new RpcException(new Status(StatusCode.Unauthenticated, "Could not resolve account."));
+        var profile = await cosmo.GetProviderProfileAsync(accountId);
         return new GetProviderProfileResponse
         {
             Profile = profile is not null ? MapProviderToProto(profile) : null
@@ -260,6 +273,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
 
     public override async Task<CreateProviderProfileResponse> CreateProviderProfile(CreateProviderProfileRequest request, ServerCallContext context)
     {
+        var accountId = context.GetAccountId()
+            ?? throw new RpcException(new Status(StatusCode.Unauthenticated, "Could not resolve account."));
+
         ValidateProviderDisplayName(request.Profile.DisplayName);
 
         if (await cosmo.IsProviderDisplayNameTakenAsync(request.Profile.DisplayName))
@@ -267,7 +283,7 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
 
         var profile = new ProviderProfile
         {
-            AccountId = request.Profile.AccountId,
+            AccountId = accountId,
             DisplayName = request.Profile.DisplayName,
             Bio = request.Profile.Bio,
             AvatarUrl = request.Profile.AvatarUrl,
@@ -289,7 +305,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
 
     public override async Task<UpdateProviderProfileResponse> UpdateProviderProfile(UpdateProviderProfileRequest request, ServerCallContext context)
     {
-        var existing = await cosmo.GetProviderProfileAsync(request.Profile.AccountId);
+        var accountId = context.GetAccountId()
+            ?? throw new RpcException(new Status(StatusCode.Unauthenticated, "Could not resolve account."));
+        var existing = await cosmo.GetProviderProfileAsync(accountId);
         if (existing is null)
             throw new RpcException(new Status(StatusCode.NotFound, "Provider profile not found"));
 
@@ -383,7 +401,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
 
     public override async Task<UpgradeToPremiumResponse> UpgradeToPremium(UpgradeToPremiumRequest request, ServerCallContext context)
     {
-        var (success, error, profile) = await marketplaceService.UpgradeToPremiumAsync(request.AccountId);
+        var accountId = context.GetAccountId()
+            ?? throw new RpcException(new Status(StatusCode.Unauthenticated, "Could not resolve account."));
+        var (success, error, profile) = await marketplaceService.UpgradeToPremiumAsync(accountId);
         var response = new UpgradeToPremiumResponse
         {
             Success = success,
@@ -396,7 +416,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
 
     public override async Task<CancelPremiumResponse> CancelPremium(CancelPremiumRequest request, ServerCallContext context)
     {
-        var (profile, creditsRefunded) = await marketplaceService.CancelPremiumAsync(request.AccountId);
+        var accountId = context.GetAccountId()
+            ?? throw new RpcException(new Status(StatusCode.Unauthenticated, "Could not resolve account."));
+        var (profile, creditsRefunded) = await marketplaceService.CancelPremiumAsync(accountId);
         var response = new CancelPremiumResponse
         {
             Success = profile is not null,
@@ -472,7 +494,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
         svgContent = Regex.Replace(svgContent, @"href\s*=\s*""javascript:[^""]*""", @"href=""""", RegexOptions.IgnoreCase);
         svgContent = Regex.Replace(svgContent, @"href\s*=\s*'javascript:[^']*'", @"href=''", RegexOptions.IgnoreCase);
 
-        var profile = await cosmo.GetProviderProfileAsync(request.AccountId);
+        var accountId = context.GetAccountId()
+            ?? throw new RpcException(new Status(StatusCode.Unauthenticated, "Could not resolve account."));
+        var profile = await cosmo.GetProviderProfileAsync(accountId);
         if (profile is null)
             return new UploadProviderLogoResponse { Success = false, Error = "Provider profile not found" };
 
@@ -590,7 +614,9 @@ public partial class MarketplaceRPC(ILogger<MarketplaceRPC> logger, Cosmo cosmo,
 
     public override async Task<GetProviderItemsResponse> GetProviderItems(GetProviderItemsRequest request, ServerCallContext context)
     {
-        var items = await cosmo.GetMarketplaceItemsByAccountAsync(request.AccountId);
+        var accountId = context.GetAccountId()
+            ?? throw new RpcException(new Status(StatusCode.Unauthenticated, "Could not resolve account."));
+        var items = await cosmo.GetMarketplaceItemsByAccountAsync(accountId);
         var response = new GetProviderItemsResponse();
         foreach (var item in items)
         {

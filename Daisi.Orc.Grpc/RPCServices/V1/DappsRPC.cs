@@ -26,8 +26,11 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             else
             {
                 var result = await cosmo.GetDappAsync(request.DappId);
+                if (result is null)
+                    throw new RpcException(new Status(StatusCode.NotFound, "App not found."));
+                if (result.AccountId != accountId)
+                    throw new RpcException(new Status(StatusCode.PermissionDenied, "Access denied."));
                 response.Dapps.Add(result.ConvertToRpc());
-
             }
 
 

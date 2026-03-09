@@ -18,7 +18,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
         public override async Task<GetCreditAccountResponse> GetCreditAccount(
             GetCreditAccountRequest request, ServerCallContext context)
         {
-            var accountId = ResolveAccountId(request.AccountId, context);
+            var accountId = ResolveAccountId(context);
             var account = await creditService.GetBalanceAsync(accountId);
 
             return new GetCreditAccountResponse
@@ -30,7 +30,7 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
         public override async Task<GetCreditTransactionsResponse> GetCreditTransactions(
             GetCreditTransactionsRequest request, ServerCallContext context)
         {
-            var accountId = ResolveAccountId(request.AccountId, context);
+            var accountId = ResolveAccountId(context);
             var pageSize = request.PageSize > 0 ? request.PageSize : 20;
             var pageIndex = request.PageIndex >= 0 ? request.PageIndex : 0;
 
@@ -63,12 +63,15 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
         public override async Task<SetMultipliersResponse> SetMultipliers(
             SetMultipliersRequest request, ServerCallContext context)
         {
+            await EnsureAdminAsync(context);
+
+            var accountId = !string.IsNullOrWhiteSpace(request.AccountId) ? request.AccountId : ResolveAccountId(context);
             var account = await creditService.SetMultipliersAsync(
-                request.AccountId,
+                accountId,
                 request.HasTokenEarnMultiplier ? request.TokenEarnMultiplier : null,
                 request.HasUptimeEarnMultiplier ? request.UptimeEarnMultiplier : null);
 
-            logger.LogInformation($"Multipliers updated for account {request.AccountId}");
+            logger.LogInformation("Multipliers updated for account {AccountId}", accountId);
 
             return new SetMultipliersResponse
             {
@@ -79,12 +82,15 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
         public override async Task<PurchaseCreditsResponse> PurchaseCredits(
             PurchaseCreditsRequest request, ServerCallContext context)
         {
+            await EnsureAdminAsync(context);
+
+            var accountId = !string.IsNullOrWhiteSpace(request.AccountId) ? request.AccountId : ResolveAccountId(context);
             await creditService.PurchaseCreditsAsync(
-                request.AccountId, request.Amount, request.Description);
+                accountId, request.Amount, request.Description);
 
-            var account = await creditService.GetBalanceAsync(request.AccountId);
+            var account = await creditService.GetBalanceAsync(accountId);
 
-            logger.LogInformation($"Purchased {request.Amount} credits for account {request.AccountId}");
+            logger.LogInformation("Purchased {Amount} credits for account {AccountId}", request.Amount, accountId);
 
             return new PurchaseCreditsResponse
             {
@@ -95,12 +101,15 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
         public override async Task<AdjustCreditsResponse> AdjustCredits(
             AdjustCreditsRequest request, ServerCallContext context)
         {
+            await EnsureAdminAsync(context);
+
+            var accountId = !string.IsNullOrWhiteSpace(request.AccountId) ? request.AccountId : ResolveAccountId(context);
             await creditService.AdjustCreditsAsync(
-                request.AccountId, request.Amount, request.Description);
+                accountId, request.Amount, request.Description);
 
-            var account = await creditService.GetBalanceAsync(request.AccountId);
+            var account = await creditService.GetBalanceAsync(accountId);
 
-            logger.LogInformation($"Adjusted {request.Amount} credits for account {request.AccountId}");
+            logger.LogInformation("Adjusted {Amount} credits for account {AccountId}", request.Amount, accountId);
 
             return new AdjustCreditsResponse
             {
@@ -211,13 +220,10 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             _ => Orc.Core.Data.Models.AnomalyStatus.Open
         };
 
-        private static string ResolveAccountId(string requestAccountId, ServerCallContext context)
+        private static string ResolveAccountId(ServerCallContext context)
         {
-            if (!string.IsNullOrWhiteSpace(requestAccountId))
-                return requestAccountId;
-
             return context.GetAccountId() ?? throw new RpcException(
-                new Status(StatusCode.InvalidArgument, "AccountId is required."));
+                new Status(StatusCode.Unauthenticated, "Could not resolve account from authenticated key."));
         }
 
         private static CreditAccountInfo MapToProto(Orc.Core.Data.Models.CreditAccount account)
