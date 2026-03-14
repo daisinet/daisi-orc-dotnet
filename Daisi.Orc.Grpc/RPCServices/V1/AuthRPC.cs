@@ -114,8 +114,8 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 response.response.UserAccountId = owner.AccountId;
                 logger.LogInformation($"ValidateClientKey: User={owner.Name}, Role={owner.Role} ({(int)(owner.Role ?? UserRoles.Reader)})");
             }
-            else if(response.key is not null 
-                && response.key.Owner is not null 
+            else if(response.key?.Owner is not null 
+                && response.response.IsValid
                 && response.key.Owner.SystemRole == SystemRoles.App)
             {
                 response.response.UserAccountId = response.key.Owner.AccountId;
