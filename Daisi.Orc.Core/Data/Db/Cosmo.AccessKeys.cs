@@ -121,8 +121,8 @@ namespace Daisi.Orc.Core.Data.Db
             //key.TimeToLive = 30 * 24 * 60; // Every 30 days, everyone must reauth
 
             key.DateExpires = (owner.SystemRole == Protos.V1.SystemRoles.User)
-                                ? DateTime.UtcNow.AddDays(30) // 30 days in seconds for users
-                                : DateTime.UtcNow.AddMinutes(60); //60 minutes in seconds for non-users
+                                ? DateTime.UtcNow.AddDays(30) 
+                                : DateTime.UtcNow.AddMinutes(60);
 
             key.ParentKeyId = secretKey.Id;
             key.IpAddress = requestorIPAddress?.ToString() ?? string.Empty;
