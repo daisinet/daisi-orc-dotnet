@@ -103,7 +103,9 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
 
             response = await ValidateClientKeyWithSecretKey(request.ClientKey, request.SecretKey);
 
-            if (response.key is not null && response.response.IsValid && response.key.Owner.SystemRole == SystemRoles.User)
+            if (response.key is not null 
+                && response.response.IsValid 
+                && response.key.Owner.SystemRole == SystemRoles.User)
             {
                 var owner = response.key.Owner;
                 response.response.UserId = owner.Id;
@@ -111,6 +113,12 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 response.response.UserRole = owner.Role ?? UserRoles.Reader;
                 response.response.UserAccountId = owner.AccountId;
                 logger.LogInformation($"ValidateClientKey: User={owner.Name}, Role={owner.Role} ({(int)(owner.Role ?? UserRoles.Reader)})");
+            }
+            else if(response.key is not null 
+                && response.key.Owner is not null 
+                && response.key.Owner.SystemRole == SystemRoles.App)
+            {
+                response.response.UserAccountId = response.key.Owner.AccountId;
             }
 
             return response.response;
@@ -120,8 +128,8 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
         {
             (ValidateClientKeyResponse response, AccessKey key) response = (new ValidateClientKeyResponse(), null);
 
-            var result = await cosmo.GetKeyAsync(clientKey, KeyTypes.Client);
-            if (result is null || result.DateExpires < DateTime.UtcNow)
+            var clientKeyResult = await cosmo.GetKeyAsync(clientKey, KeyTypes.Client);
+            if (clientKeyResult is null || clientKeyResult.DateExpires < DateTime.UtcNow)
             {
                 response.response.IsValid = false;
                 response.response.FailureReason = "DAISI: KEY NOT FOUND";
@@ -130,17 +138,18 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
 
             var secretKey = await cosmo.GetKeyAsync(appSecretKey, KeyTypes.Secret);
 
-            if (result.ParentKeyId != secretKey.Id)
-            {
+            if (clientKeyResult.ParentKeyId != secretKey.Id
+                && clientKeyResult.Owner.SystemRole != SystemRoles.App)
+            {                
                 response.response.IsValid = false;
                 response.response.FailureReason = "DAISI: INVALID KEY ACCESS";
                 return response;
             }
 
-            response.key = result;
+            response.key = clientKeyResult;
             response.response.IsValid = true;
             response.response.FailureReason = string.Empty;
-            response.response.KeyExpiration = result.DateExpires.HasValue ? Timestamp.FromDateTime(result.DateExpires.Value) : null;
+            response.response.KeyExpiration = clientKeyResult.DateExpires.HasValue ? Timestamp.FromDateTime(clientKeyResult.DateExpires.Value) : null;
             return response;
         }
 
