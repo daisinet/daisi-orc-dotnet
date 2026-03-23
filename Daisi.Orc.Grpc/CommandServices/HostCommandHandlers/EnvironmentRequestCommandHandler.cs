@@ -26,9 +26,9 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
 
         public static async Task HandleHostUpdaterCheckAsync(ChannelWriter<Command> responseQueue, Core.Data.Models.Host host, Cosmo cosmo, ILogger logger)
         {
-            // Only skip update check for known non-desktop platforms.
-            var isMobile = host.OperatingSystem == "Android" || host.OperatingSystem == "IOS";
-            if (isMobile)
+            // Skip update check for non-desktop platforms (mobile and browser hosts).
+            var skipUpdate = host.OperatingSystem is "Android" or "IOS" or "Browser";
+            if (skipUpdate)
                 return;
 
             logger.LogInformation("Update check for {Host}: OS={OS}, AppVersion={Version}, ReleaseGroup={Group}",

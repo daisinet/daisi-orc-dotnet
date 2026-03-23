@@ -28,10 +28,14 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
                 return;
             }
 
-            var request = command.Payload.Unpack<HeartbeatRequest>();
+            HeartbeatRequest? request = null;
+            if (command.Payload != null && !string.IsNullOrEmpty(command.Payload.TypeUrl))
+            {
+                request = command.Payload.Unpack<HeartbeatRequest>();
+            }
 
             // Capture loaded model names from heartbeat settings
-            if (request.Settings?.Model?.Models is { Count: > 0 } models)
+            if (request?.Settings?.Model?.Models is { Count: > 0 } models)
             {
                 hostOnline.LoadedModelNames = models.Select(m => m.Name).Where(n => !string.IsNullOrEmpty(n)).ToList();
             }
@@ -84,13 +88,17 @@ namespace Daisi.Orc.Grpc.CommandServices.Handlers
             logger.LogInformation($"Handled Heartbeat for {hostOnline.Host.Name} at {DateTime.UtcNow} from IP {ip}");
 
             // Model sync: send DownloadModelRequest for any required models the host doesn't have yet
-            try
+            // Browser hosts manage their own models — skip server-driven model sync.
+            if (hostOnline.Host.OperatingSystem != "Browser")
             {
-                await SyncRequiredModelsAsync(hostOnline, responseQueue);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Model sync failed for host {HostName}", hostOnline.Host.Name);
+                try
+                {
+                    await SyncRequiredModelsAsync(hostOnline, responseQueue);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Model sync failed for host {HostName}", hostOnline.Host.Name);
+                }
             }
         }
 
