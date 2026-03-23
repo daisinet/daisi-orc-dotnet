@@ -69,6 +69,89 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
                 }
             }
         }
+        /// <summary>
+        /// Browser-compatible: server-stream for pushing commands to the host.
+        /// The host calls this once and receives commands continuously.
+        /// </summary>
+        public async override Task ListenForCommands(ListenForCommandsRequest request, IServerStreamWriter<Command> responseStream, ServerCallContext context)
+        {
+            Cosmo cosmo = serviceProvider.GetService<Cosmo>()!;
+
+            if (!CanAcceptHostConnection())
+            {
+                await SendHostToNextOrc(responseStream, cosmo);
+                return;
+            }
+
+            string clientKey = context.GetClientKey()!;
+            var key = await cosmo.GetKeyAsync(clientKey, KeyTypes.Client);
+
+            var host = await HostContainer.RegisterHostAsync(key.Owner.Id, cosmo, context, Program.App.Configuration);
+            HostContainer.HostsOnline.TryGetValue(host.Id, out var hostOnline);
+            hostOnline.ClientKeyId = key.Id;
+
+            logger.LogInformation($"Browser host \"{host.Name}\" connected via ListenForCommands");
+
+            // Block and send outgoing commands to the host until disconnected
+            await hostOnline.SendOutgoingCommandsAsync(responseStream, context.CancellationToken);
+
+            if (HostContainer.HostsOnline.TryGetValue(host.Id, out var currentOnline) && currentOnline == hostOnline)
+            {
+                await HostContainer.UnregisterHostAsync(host.Id, cosmo, Program.App.Configuration);
+            }
+        }
+
+        /// <summary>
+        /// Browser-compatible: unary RPC for the host to send commands (heartbeat, inference responses, etc).
+        /// </summary>
+        public async override Task<SendCommandResponse> SendCommand(SendCommandRequest request, ServerCallContext context)
+        {
+            Cosmo cosmo = serviceProvider.GetService<Cosmo>()!;
+            string clientKey = context.GetClientKey()!;
+            var key = await cosmo.GetKeyAsync(clientKey, KeyTypes.Client);
+
+            // Find the host's online state
+            var hostId = key.Owner.Id;
+            // The owner of a host client key is the host itself — find which host is online with this key
+            var onlineHost = HostContainer.HostsOnline.Values.FirstOrDefault(h => h.ClientKeyId == key.Id);
+            if (onlineHost == null)
+            {
+                return new SendCommandResponse { Success = false };
+            }
+
+            var command = request.Command;
+            var sessionHandler = serviceProvider.GetService<SessionIncomingQueueHandler>()!;
+            sessionHandler.CallContext = context;
+
+            try
+            {
+                IOrcCommandHandler? handler = null;
+
+                if (Handlers.TryGetValue(command.Name, out Type? commandHandlerType))
+                {
+                    handler = (IOrcCommandHandler?)serviceProvider.GetService(commandHandlerType);
+                    handler.CallContext = context;
+                    await handler.HandleAsync(onlineHost.Host.Id, command, onlineHost.OutgoingQueue.Writer, context.CancellationToken);
+                }
+                else if (!string.IsNullOrWhiteSpace(command.SessionId))
+                {
+                    await sessionHandler.HandleAsync(onlineHost.Host.Id, command, onlineHost.OutgoingQueue.Writer, context.CancellationToken);
+                }
+                else if (!string.IsNullOrEmpty(command.RequestId)
+                    && onlineHost.RequestChannels.TryGetValue(command.RequestId, out var requestChannel))
+                {
+                    requestChannel.Writer.TryWrite(command);
+                }
+            }
+            catch (Exception exc)
+            {
+                logger.LogError($"SendCommand error: {exc.GetBaseException().Message}");
+                return new SendCommandResponse { Success = false };
+            }
+
+            return new SendCommandResponse { Success = true };
+        }
+
         public async override Task Open(IAsyncStreamReader<Command> requestStream, IServerStreamWriter<Command> responseStream, ServerCallContext context)
         {
             Cosmo cosmo = serviceProvider.GetService<Cosmo>()!;
