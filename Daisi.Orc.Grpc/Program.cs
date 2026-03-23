@@ -51,6 +51,18 @@ public partial class Program
         builder.Services.AddTransient<InferenceReceiptCommandHandler>();
         builder.Services.AddTransient<ToolExecutionCommandHandler>();
 
+        // CORS for grpc-web (browser host)
+        builder.Services.AddCors(options =>
+        {
+            options.AddPolicy("GrpcWeb", policy =>
+            {
+                policy.AllowAnyOrigin()
+                      .AllowAnyMethod()
+                      .AllowAnyHeader()
+                      .WithExposedHeaders("Grpc-Status", "Grpc-Message", "Grpc-Encoding", "Grpc-Accept-Encoding");
+            });
+        });
+
         // Add services to the container.
         builder.Services.AddGrpc(options =>
         {
@@ -97,6 +109,8 @@ public partial class Program
         app.MapGet("/", () => "Communication with DAISI endpoints must be made through the DAISI SDK. To download a DAISI host application and/or the SDK, go to https://daisi.ai");
 
         app.UseRouting();
+        app.UseGrpcWeb(new GrpcWebOptions { DefaultEnabled = true });
+        app.UseCors("GrpcWeb");
         app.UseAuthentication();
         app.UseAuthorization();
 

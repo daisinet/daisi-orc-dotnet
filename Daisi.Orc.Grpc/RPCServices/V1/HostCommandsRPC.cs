@@ -90,6 +90,11 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             HostContainer.HostsOnline.TryGetValue(host.Id, out var hostOnline);
             hostOnline.ClientKeyId = key.Id;
 
+            // Mark as browser host — skips update checks and server-driven model sync
+            host.OperatingSystem = "Browser";
+            host.AppVersion = "1.0.0.0";
+            await cosmo.PatchHostEnvironmentAsync(host);
+
             logger.LogInformation($"Browser host \"{host.Name}\" connected via ListenForCommands");
 
             // Block and send outgoing commands to the host until disconnected
