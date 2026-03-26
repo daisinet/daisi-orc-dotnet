@@ -44,6 +44,14 @@ public partial class Program
         builder.Services.AddHttpClient();
         builder.Services.AddSingleton<HuggingFaceService>();
 
+        // DaisiChain pipeline parallelism
+        builder.Services.AddSingleton<PipelineGroupManager>(sp =>
+            new PipelineGroupManager(sp.GetRequiredService<ILogger<PipelineGroupManager>>()));
+        builder.Services.AddSingleton<DaisiChainEngine>(sp =>
+            new DaisiChainEngine(
+                sp.GetRequiredService<PipelineGroupManager>(),
+                sp.GetRequiredService<ILogger<DaisiChainEngine>>()));
+
         builder.Services.AddTransient<HeartbeatRequestCommandHandler>();
         builder.Services.AddTransient<SessionIncomingQueueHandler>();
         builder.Services.AddTransient<EnvironmentRequestCommandHandler>();

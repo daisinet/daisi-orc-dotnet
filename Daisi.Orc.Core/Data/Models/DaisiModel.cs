@@ -26,6 +26,11 @@ namespace Daisi.Orc.Core.Data.Models
         [JsonPropertyName("lLama")]
         public DaisiModelBackendSettings? Backend { get; set; }
 
+        // DaisiChain pipeline parallelism
+        public int TotalLayers { get; set; }
+        public bool PipelineEnabled { get; set; }
+        public int MinPipelineHosts { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }

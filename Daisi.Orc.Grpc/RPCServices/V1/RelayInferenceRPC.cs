@@ -6,12 +6,22 @@ using Grpc.Core;
 
 namespace Daisi.Orc.Grpc.RPCServices.V1
 {
-    public class RelayInferenceRPC(ILogger<RelayInferenceRPC> logger, CreditService creditService, SecureToolService secureToolService) : InferencesProto.InferencesProtoBase
+    public class RelayInferenceRPC(ILogger<RelayInferenceRPC> logger, CreditService creditService, SecureToolService secureToolService, DaisiChainEngine daisiChainEngine) : InferencesProto.InferencesProtoBase
     {
         public async override Task<CreateInferenceResponse> Create(CreateInferenceRequest request, ServerCallContext context)
         {
             if (!SessionContainer.TryGet(request.SessionId, out var session))
                 throw new Exception("DAISI: Invalid Session ID");
+
+            // DaisiChain: pipeline sessions don't need to create inference on a single host
+            if (session.IsPipeline)
+            {
+                return new CreateInferenceResponse
+                {
+                    SessionId = session.Id,
+                    InferenceId = $"pipeline-inf-{Guid.NewGuid():N}",
+                };
+            }
 
             // Pre-flight credit check: if consumer != host account, verify balance
             var consumerAccountId = context.GetAccountId();
@@ -75,6 +85,17 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
         {
             if (!SessionContainer.TryGet(request.SessionId, out var session))
                 throw new Exception("DAISI: Invalid Session ID");
+
+            // DaisiChain: pipeline sessions use the DaisiChainEngine instead of relaying to a single host
+            if (session.IsPipeline)
+            {
+                await foreach (var response in daisiChainEngine.RunInferenceAsync(
+                    session.PipelineGroup!, request, context.CancellationToken))
+                {
+                    await responseStream.WriteAsync(response);
+                }
+                return;
+            }
 
             await HostContainer.SendToHostAndStreamAsync<SendInferenceRequest, SendInferenceResponse>(session, request, responseStream, context.CancellationToken);
 
