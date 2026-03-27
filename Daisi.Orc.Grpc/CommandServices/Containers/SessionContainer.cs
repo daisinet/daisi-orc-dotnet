@@ -48,7 +48,20 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
         internal static void Close(string sessionId)
         {
             if (SessionsById.TryRemove(sessionId, out var removedSession))
+            {
                 HostContainer.SendSessionCloseRequest(removedSession.CreateResponse.Host.Id, sessionId);
+
+                // DaisiChain: reset KV cache on all pipeline stage hosts
+                if (removedSession.IsPipeline)
+                {
+                    try
+                    {
+                        var pipelineManager = Program.App.Services.GetService<PipelineGroupManager>();
+                        pipelineManager?.ResetGroupSessionState(removedSession.PipelineGroup!.Id, sessionId);
+                    }
+                    catch { /* Pipeline manager may not be registered */ }
+                }
+            }
         }
 
         internal static bool TryGetExistingSession(string? clientKey, string id, out DaisiSession existingSession)
@@ -77,6 +90,12 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
 
         public CloseSessionRequest CloseRequest { get; set; }
         public CloseSessionResponse CloseResponse { get; set; }
+
+        /// <summary>DaisiChain: set when this session uses pipeline parallelism.</summary>
+        public PipelineGroup? PipelineGroup { get; set; }
+
+        /// <summary>DaisiChain: true if this session uses pipeline parallelism.</summary>
+        public bool IsPipeline => PipelineGroup is not null;
 
         public void ResetInteraction()
         {

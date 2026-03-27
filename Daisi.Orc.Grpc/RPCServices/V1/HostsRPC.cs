@@ -3,6 +3,7 @@ using Daisi.Orc.Core.Data.Models;
 using Daisi.Orc.Grpc.Authentication;
 using Daisi.Orc.Grpc.CommandServices.Containers;
 using Daisi.Protos.V1;
+using Daisi.SDK.Models;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.AspNetCore.Authorization;
@@ -258,6 +259,116 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             response.SecretKey = secretKey.Key;
             response.HostId = host.Id;
 
+            return response;
+        }
+
+        private const string PublicAccountName = "DAISI Public Hosts";
+
+        [AllowAnonymous]
+        public async override Task<RegisterAnonymousHostResponse> RegisterAnonymousHost(RegisterAnonymousHostRequest request, ServerCallContext context)
+        {
+            // Validate ORC secret key — only the public website server should know this
+            if (string.IsNullOrEmpty(request.OrcSecretKey) || request.OrcSecretKey != DaisiStaticSettings.SecretKey)
+                throw new RpcException(new Status(StatusCode.PermissionDenied, "Invalid ORC secret key."));
+
+            // Get or create the public hosts account
+            var account = await cosmo.GetAccountByNameAsync(PublicAccountName);
+            if (account == null)
+                account = await cosmo.CreateAccountAsync(new Core.Data.Models.Account { Name = PublicAccountName });
+
+            var ipAddress = context.GetRemoteIpAddress();
+
+            // Create host under the public account
+            Core.Data.Models.Host host = new()
+            {
+                IpAddress = ipAddress ?? string.Empty,
+                Name = request.Host.Name ?? "Anonymous Browser Host",
+                DateCreated = DateTime.UtcNow,
+                AccountId = account.Id,
+                Status = HostStatus.Unknown,
+                OperatingSystem = request.Host.OperatingSystem ?? "Browser",
+                OperatingSystemVersion = request.Host.OperatingSystemVersion ?? "WebGPU",
+            };
+
+            host = await cosmo.CreateHostAsync(host);
+
+            // Create secret key for the host
+            var owner = new AccessKeyOwner
+            {
+                AccountId = account.Id,
+                Id = host.Id,
+                Name = host.Name,
+                SystemRole = SystemRoles.HostDevice
+            };
+            var secretKey = await cosmo.CreateSecretKeyAsync(owner);
+
+            host.SecretKeyId = secretKey.Id;
+            await cosmo.PatchHostSecretKeyIdAsync(host.Id, host.AccountId, secretKey.Id);
+
+            // Create client key directly (so caller doesn't need a separate auth call)
+            if (!System.Net.IPAddress.TryParse(ipAddress, out var parsedIp))
+                parsedIp = System.Net.IPAddress.Loopback;
+            var clientKey = await cosmo.CreateClientKeyAsync(secretKey, parsedIp, owner);
+
+            return new RegisterAnonymousHostResponse
+            {
+                ClientKey = clientKey.Key,
+                HostId = host.Id,
+                AccountId = account.Id
+            };
+        }
+
+        public async override Task<ClaimHostResponse> ClaimHost(ClaimHostRequest request, ServerCallContext context)
+        {
+            var response = new ClaimHostResponse();
+            try
+            {
+                var targetAccountId = context.GetAccountId();
+
+                // Read source host from the public account
+                var sourceHost = await cosmo.GetHostAsync(request.SourceAccountId, request.HostId);
+                if (sourceHost == null)
+                    throw new RpcException(new Status(StatusCode.NotFound, "Host not found."));
+
+                // Disconnect from ORC if online
+                await HostContainer.UnregisterHostAsync(sourceHost, cosmo, Program.App.Configuration);
+
+                // Create new host under the claiming user's account
+                Core.Data.Models.Host newHost = new()
+                {
+                    IpAddress = sourceHost.IpAddress,
+                    Name = sourceHost.Name,
+                    DateCreated = DateTime.UtcNow,
+                    AccountId = targetAccountId,
+                    Status = HostStatus.Offline,
+                    OperatingSystem = sourceHost.OperatingSystem,
+                    OperatingSystemVersion = sourceHost.OperatingSystemVersion,
+                };
+
+                newHost = await cosmo.CreateHostAsync(newHost);
+
+                // Create new secret key for the claimed host
+                var newSecretKey = await cosmo.CreateSecretKeyAsync(new AccessKeyOwner
+                {
+                    AccountId = targetAccountId,
+                    Id = newHost.Id,
+                    Name = newHost.Name,
+                    SystemRole = SystemRoles.HostDevice
+                });
+                newHost.SecretKeyId = newSecretKey.Id;
+                await cosmo.PatchHostSecretKeyIdAsync(newHost.Id, newHost.AccountId, newSecretKey.Id);
+
+                // Archive the source host
+                await cosmo.PatchHostStatusAsync(request.HostId, request.SourceAccountId, HostStatus.Archived);
+
+                response.Success = true;
+                response.NewHostId = newHost.Id;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to claim host {HostId}", request.HostId);
+                response.Success = false;
+            }
             return response;
         }
     }

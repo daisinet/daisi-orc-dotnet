@@ -76,6 +76,14 @@ namespace Daisi.Orc.Grpc.CommandServices.Containers
             {
                 if (HostsOnline.TryRemove(host.Id, out var hostToRemove))
                 {
+                    // DaisiChain: mark any pipeline groups containing this host as degraded
+                    try
+                    {
+                        var pipelineManager = Program.App.Services.GetService<PipelineGroupManager>();
+                        pipelineManager?.OnHostOffline(host.Id);
+                    }
+                    catch { /* Pipeline manager may not be registered */ }
+
                     foreach (var sessionId in hostToRemove.SessionIncomingQueues.Keys)
                     {
                         SessionContainer.Close(sessionId);

@@ -8,12 +8,22 @@ using Microsoft.AspNetCore.Authorization;
 namespace Daisi.Orc.Grpc.RPCServices.V1
 {
     [Authorize]
-    public class SessionsRPC(ILogger<SessionsRPC> logger, Cosmo cosmo) : SessionsProto.SessionsProtoBase
+    public class SessionsRPC(ILogger<SessionsRPC> logger, Cosmo cosmo, PipelineGroupManager pipelineGroupManager) : SessionsProto.SessionsProtoBase
     {
 
         public async override Task<CreateSessionResponse> Create(CreateSessionRequest request, ServerCallContext context)
         {
             var clientKey = context.GetClientKey();
+
+            // Check if the requested model is pipeline-enabled
+            var enabledModels = await cosmo.GetEnabledModelsAsync();
+            var model = enabledModels.FirstOrDefault(m =>
+                string.Equals(m.Name, request.ModelName, StringComparison.OrdinalIgnoreCase));
+
+            if (model is not null && model.PipelineEnabled && model.TotalLayers > 0)
+            {
+                return await CreatePipelineSession(request, context, clientKey, model);
+            }
 
             DaisiSession daisiSession = new();
             daisiSession.Id = "session-" + Guid.NewGuid().ToString();
@@ -40,6 +50,70 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
 
                 return daisiSession.CreateResponse;
             }
+        }
+
+        /// <summary>
+        /// DaisiChain: Create a pipeline session that distributes model layers across multiple hosts.
+        /// </summary>
+        private async Task<CreateSessionResponse> CreatePipelineSession(
+            CreateSessionRequest request, ServerCallContext context, string clientKey,
+            Daisi.Orc.Core.Data.Models.DaisiModel model)
+        {
+            var accountId = context.GetAccountId();
+
+            // Find available hosts for the pipeline
+            int minHosts = model.MinPipelineHosts > 0 ? model.MinPipelineHosts : 2;
+            var availableHosts = HostContainer.HostsOnline.Values
+                .Where(h => !h.Host.ToolsOnly)
+                .OrderBy(h => h.Host.DateLastSession)
+                .Take(minHosts)
+                .ToList();
+
+            if (availableHosts.Count < minHosts)
+                throw new RpcException(new Status(StatusCode.Unavailable,
+                    $"DaisiChain: Need {minHosts} hosts for pipeline model '{model.Name}', but only {availableHosts.Count} are online."));
+
+            // Create pipeline group
+            // HiddenDim and VocabSize will be reported by hosts after loading — use 0 as placeholder
+            var group = pipelineGroupManager.CreateGroup(
+                model.Name, model.TotalLayers, hiddenDim: 0, vocabSize: 0, availableHosts);
+
+            // Load pipeline stages on all hosts
+            uint contextSize = model.Backend?.ContextSize ?? 4096;
+            bool loaded = await pipelineGroupManager.LoadGroupAsync(group, model.FileName, model.Url, contextSize);
+            if (!loaded)
+                throw new RpcException(new Status(StatusCode.Internal,
+                    $"DaisiChain: Failed to load pipeline stages for model '{model.Name}'."));
+
+            // Create the session — the primary host is the first stage
+            var firstStageHost = availableHosts[0];
+
+            DaisiSession daisiSession = new();
+            daisiSession.Id = "session-" + Guid.NewGuid().ToString();
+            daisiSession.CreateRequest = request;
+            daisiSession.CreateClientKey = clientKey;
+            daisiSession.ConsumerAccountId = accountId;
+            daisiSession.PipelineGroup = group;
+
+            daisiSession.CreateResponse = new CreateSessionResponse()
+            {
+                Id = daisiSession.Id,
+                Host = new Protos.V1.Host()
+                {
+                    Id = firstStageHost.Host.Id,
+                    Name = firstStageHost.Host.Name,
+                    IpAddress = firstStageHost.Host.IpAddress,
+                    Port = firstStageHost.Host.Port,
+                },
+            };
+
+            SessionContainer.Add(daisiSession);
+            firstStageHost.AddSession(daisiSession);
+
+            logger.LogInformation("DaisiChain: Created pipeline session {SessionId} for model '{Model}' with {Stages} stages",
+                daisiSession.Id, model.Name, group.Stages.Count);
+
+            return daisiSession.CreateResponse;
         }
         public async override Task<CloseSessionResponse> Close(CloseSessionRequest request, ServerCallContext context)
         {

@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace Daisi.Orc.Grpc.RPCServices.V1
 {
-    public class ModelsRPC(ILogger<ModelsRPC> logger, Cosmo cosmo, HuggingFaceService huggingFaceService) : ModelsProto.ModelsProtoBase
+    public class ModelsRPC(ILogger<ModelsRPC> logger, Cosmo cosmo, HuggingFaceService huggingFaceService, PipelineGroupManager pipelineGroupManager) : ModelsProto.ModelsProtoBase
     {
         [HostsOnly]
         public async override Task<GetRequiredModelsResponse> GetRequiredModels(GetRequiredModelsRequest request, ServerCallContext context)
@@ -107,6 +107,9 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
 
                 logger.LogInformation("Broadcasted RemoveModelRequest for '{ModelName}' to {Count} host(s)",
                     model.Name, HostContainer.HostsOnline.Count);
+
+                // DaisiChain: unload any pipeline groups for this model
+                pipelineGroupManager.UnloadGroupsForModel(model.Name);
             }
 
             return new DeleteModelResponse { Success = success };
