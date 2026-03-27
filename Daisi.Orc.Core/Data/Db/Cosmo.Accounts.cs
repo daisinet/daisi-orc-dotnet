@@ -96,6 +96,24 @@ namespace Daisi.Orc.Core.Data.Db
             var response = await container.CreateItemAsync(user, GetPartitionKey(account));
             return response.Resource;
         }
+        /// <summary>
+        /// Cross-partition lookup of an account by name. Returns null if not found.
+        /// </summary>
+        public async Task<Models.Account?> GetAccountByNameAsync(string name)
+        {
+            var container = await GetContainerAsync(AccountsContainerName);
+            var query = new QueryDefinition("SELECT * FROM c WHERE c.type = @type AND c.Name = @name")
+                .WithParameter("@type", "Account")
+                .WithParameter("@name", name);
+            using var resultSet = container.GetItemQueryIterator<Models.Account>(query);
+            while (resultSet.HasMoreResults)
+            {
+                var response = await resultSet.ReadNextAsync();
+                if (response.Count > 0) return response.First();
+            }
+            return null;
+        }
+
         public async Task<Models.Account> GetAccountAsync(string accountId)
         {
             var container = await GetContainerAsync(AccountsContainerName);
