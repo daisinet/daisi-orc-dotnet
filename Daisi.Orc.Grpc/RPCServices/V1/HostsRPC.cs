@@ -306,7 +306,9 @@ namespace Daisi.Orc.Grpc.RPCServices.V1
             await cosmo.PatchHostSecretKeyIdAsync(host.Id, host.AccountId, secretKey.Id);
 
             // Create client key directly (so caller doesn't need a separate auth call)
-            var clientKey = await cosmo.CreateClientKeyAsync(secretKey, System.Net.IPAddress.Parse(ipAddress ?? "0.0.0.0"), owner);
+            if (!System.Net.IPAddress.TryParse(ipAddress, out var parsedIp))
+                parsedIp = System.Net.IPAddress.Loopback;
+            var clientKey = await cosmo.CreateClientKeyAsync(secretKey, parsedIp, owner);
 
             return new RegisterAnonymousHostResponse
             {

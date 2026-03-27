@@ -10,6 +10,7 @@ using Daisi.Orc.Grpc.RPCServices.V1;
 using Daisi.Orc.Grpc.Endpoints;
 using Daisi.Orc.Grpc.Services;
 using Daisi.SDK.Extensions;
+using Daisi.SDK.Models;
 using Daisi.SDK.Web.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
@@ -21,6 +22,8 @@ public partial class Program
     private static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
+
+        DaisiStaticSettings.LoadFromConfiguration(builder.Configuration);
 
         builder.Services.AddRoutingCore();
 
