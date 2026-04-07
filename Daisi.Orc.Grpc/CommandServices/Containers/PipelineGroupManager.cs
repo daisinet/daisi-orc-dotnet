@@ -96,13 +96,15 @@ public class PipelineGroupManager
     /// <summary>
     /// Send LoadPipelineStageRequest to each host in the group and wait for all to be ready.
     /// </summary>
-    public async Task<bool> LoadGroupAsync(PipelineGroup group, string modelFileName, string modelUrl, uint contextSize = 4096)
+    public async Task<bool> LoadGroupAsync(PipelineGroup group, string modelFileName, string modelUrl,
+        uint contextSize = 4096, bool shardsAvailable = false)
     {
         var tasks = new List<Task<bool>>();
 
         foreach (var stage in group.Stages)
         {
-            tasks.Add(LoadStageOnHostAsync(group.Id, stage, modelFileName, modelUrl, contextSize, group.PeerRelayEnabled));
+            tasks.Add(LoadStageOnHostAsync(group.Id, stage, modelFileName, modelUrl, contextSize,
+                group.PeerRelayEnabled, shardsAvailable));
         }
 
         var results = await Task.WhenAll(tasks);
@@ -120,7 +122,9 @@ public class PipelineGroupManager
         return allSucceeded;
     }
 
-    private async Task<bool> LoadStageOnHostAsync(string groupId, PipelineStage stage, string modelFileName, string modelUrl, uint contextSize, bool peerRelayEnabled)
+    private async Task<bool> LoadStageOnHostAsync(string groupId, PipelineStage stage,
+        string modelFileName, string modelUrl, uint contextSize, bool peerRelayEnabled,
+        bool shardsAvailable = false)
     {
         if (!HostContainer.HostsOnline.TryGetValue(stage.HostId, out var hostOnline))
         {
@@ -137,6 +141,32 @@ public class PipelineGroupManager
             ContextSize = contextSize,
             PeerRelayEnabled = peerRelayEnabled,
         };
+
+        // Shard-based partial download: compute which shard files this stage needs
+        if (shardsAvailable)
+        {
+            request.UseShardedDownload = true;
+            request.ModelBaseUrl = modelUrl;
+
+            // Header is always needed (metadata + tensor info for all stages)
+            request.ShardFileNames.Add($"{modelFileName}.header");
+
+            // First stage needs embedding
+            if (stage.IncludeEmbedding)
+                request.ShardFileNames.Add($"{modelFileName}.embed");
+
+            // Last stage needs output head
+            if (stage.IncludeOutputHead)
+                request.ShardFileNames.Add($"{modelFileName}.output");
+
+            // Layer shards for this stage's assigned range
+            for (int i = stage.StartLayer; i < stage.EndLayer; i++)
+                request.ShardFileNames.Add($"{modelFileName}.layer.{i}");
+
+            _logger.LogInformation("DaisiChain: Stage {Stage} will download {Count} shard files ({Files})",
+                stage.StageIndex, request.ShardFileNames.Count,
+                string.Join(", ", request.ShardFileNames.Take(5)) + (request.ShardFileNames.Count > 5 ? "..." : ""));
+        }
 
         try
         {
